@@ -1,0 +1,28 @@
+{
+  "status_rules": {
+    "hunger_increase_per_hour": 5,
+    "thirst_increase_per_hour": 4,
+    "sanity_penalty_in_solitary": 5,
+    "sanity_penalty_per_bad_tag": 2
+  },
+  "combat_rules": {
+    "base_damage": 10,
+    "item_bonus": {
+      "baton": 15
+    },
+    "strength_modifier": 0.5,
+    "random_damage_range": [-3, 3],
+    "recoil_damage": 3
+  },
+  "relationship_rules": {
+    "on_attack_target_to_attacker": -25,
+    "on_attack_attacker_to_target": -10,
+    "on_give_needed_item": 20
+  },
+  "initial_setup": {
+    "guard_prisoner_ratio": [1, 2],
+    "default_relationship_score": 50,
+    "map_size": [9, 16],
+    "initial_agent_count": 6
+  }
+}

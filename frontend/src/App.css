@@ -1,0 +1,341 @@
+/* Main App styles */
+.App {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.left-panel {
+  width: 30%;
+  background-color: #2a2a2a;
+  border-right: 1px solid #444;
+  overflow-y: auto;
+}
+
+.center-panel {
+  width: 45%;
+  background-color: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-panel {
+  width: 25%;
+  background-color: #2a2a2a;
+  border-left: 1px solid #444;
+  overflow-y: auto;
+}
+
+.status-bar {
+  height: 30px;
+  background-color: #333;
+  border-top: 1px solid #444;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  font-size: 12px;
+}
+
+.connection-status {
+  margin-right: 20px;
+}
+
+.connection-status.connected {
+  color: #4CAF50;
+}
+
+.connection-status.disconnected {
+  color: #F44336;
+}
+
+.world-info {
+  color: #ccc;
+}
+
+/* Panel styles */
+.panel {
+  padding: 20px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  color: #fff;
+  font-size: 18px;
+  border-bottom: 1px solid #444;
+  padding-bottom: 10px;
+}
+
+.panel h3 {
+  color: #ccc;
+  font-size: 14px;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+/* Button styles */
+.btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  margin: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn:hover {
+  background-color: #0056b3;
+}
+
+.btn:disabled {
+  background-color: #666;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+.btn-success {
+  background-color: #28a745;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+}
+
+/* Form styles */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background-color: #333;
+  color: #fff;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* Map styles */
+.map-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #111;
+}
+
+.map-grid {
+  display: grid;
+  gap: 1px;
+  background-color: #333;
+  border: 2px solid #555;
+}
+
+.map-cell {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  position: relative;
+}
+
+.map-cell.Cell_Block {
+  background-color: #4a4a4a;
+}
+
+.map-cell.Cafeteria {
+  background-color: #8B4513;
+}
+
+.map-cell.Yard {
+  background-color: #228B22;
+}
+
+.map-cell.Solitary {
+  background-color: #800000;
+}
+
+.map-cell.Guard_Room {
+  background-color: #000080;
+}
+
+.agent-marker {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+}
+
+.agent-marker.Guard {
+  background-color: #0066cc;
+}
+
+.agent-marker.Prisoner {
+  background-color: #cc6600;
+}
+
+.agent-marker.selected {
+  box-shadow: 0 0 8px #fff;
+}
+
+/* Event log styles */
+.event-log {
+  height: 200px;
+  overflow-y: auto;
+  background-color: #222;
+  border: 1px solid #444;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.event-log-item {
+  margin-bottom: 5px;
+  padding: 2px 5px;
+  border-left: 3px solid #555;
+}
+
+.event-log-item.system {
+  border-left-color: #007bff;
+}
+
+.event-log-item.action {
+  border-left-color: #28a745;
+}
+
+.event-log-item.combat {
+  border-left-color: #dc3545;
+}
+
+/* Agent details styles */
+.agent-details {
+  background-color: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.agent-name {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.agent-role {
+  font-size: 12px;
+  color: #ccc;
+  margin-bottom: 15px;
+}
+
+.stat-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  width: 60px;
+  font-size: 11px;
+  color: #ccc;
+}
+
+.stat-value {
+  flex: 1;
+  background-color: #555;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-right: 8px;
+}
+
+.stat-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.stat-fill.hp {
+  background-color: #dc3545;
+}
+
+.stat-fill.sanity {
+  background-color: #6f42c1;
+}
+
+.stat-fill.hunger {
+  background-color: #fd7e14;
+}
+
+.stat-fill.thirst {
+  background-color: #17a2b8;
+}
+
+.stat-fill.strength {
+  background-color: #28a745;
+}
+
+.stat-number {
+  font-size: 11px;
+  color: #fff;
+  min-width: 25px;
+}
+
+.status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.status-tag {
+  background-color: #666;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
