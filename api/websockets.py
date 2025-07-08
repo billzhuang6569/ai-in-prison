@@ -87,11 +87,11 @@ class ConnectionManager:
                 "payload": {"message": f"Unknown message type: {message_type}"}
             })
     
-    async def start_experiment(self):
-        """Start the simulation"""
+    async def start_experiment(self, guard_count=None, prisoner_count=None):
+        """Start the simulation with optional agent counts"""
         if not self.game_engine.is_running:
             # Start the game loop in background
-            asyncio.create_task(self.game_engine.start_simulation())
+            asyncio.create_task(self.game_engine.start_simulation(guard_count, prisoner_count))
             
             # Broadcast start notification
             await self.broadcast_message({

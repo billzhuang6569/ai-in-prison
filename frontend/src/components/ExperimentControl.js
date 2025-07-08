@@ -24,7 +24,13 @@ function ExperimentControl() {
     { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini (快速)', cost: '低' },
     { id: 'openai/gpt-4o', name: 'GPT-4o (强大)', cost: '高' },
     { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', cost: '中' },
-    { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', cost: '中' }
+    { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', cost: '中' },
+    
+    // 新增免费模型
+    { id: 'openrouter/cypher-alpha:free', name: 'Cypher Alpha (免费)', cost: '免费' },
+    { id: 'deepseek/deepseek-r1-0528-qwen3-8b:free', name: 'DeepSeek R1 Qwen3 8B (免费)', cost: '免费' },
+    { id: 'deepseek/deepseek-r1-0528:free', name: 'DeepSeek R1 (免费)', cost: '免费' },
+    { id: 'qwen/qwen3-32b:free', name: 'Qwen3 32B (免费)', cost: '免费' }
   ]);
   
   // Load available sessions
@@ -350,8 +356,28 @@ function ExperimentControl() {
                   </option>
                 ))}
               </select>
-              <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-                选择的模型: {availableModels.find(m => m.id === experimentConfig.model)?.name}
+              <div style={{ fontSize: '10px', marginTop: '4px' }}>
+                <span style={{ color: '#888' }}>选择的模型: </span>
+                <span style={{ 
+                  color: availableModels.find(m => m.id === experimentConfig.model)?.cost === '免费' 
+                    ? '#4CAF50' 
+                    : '#ccc' 
+                }}>
+                  {availableModels.find(m => m.id === experimentConfig.model)?.name}
+                </span>
+                {availableModels.find(m => m.id === experimentConfig.model)?.cost === '免费' && (
+                  <span style={{ 
+                    marginLeft: '8px',
+                    backgroundColor: '#4CAF50', 
+                    color: 'white', 
+                    padding: '1px 6px', 
+                    borderRadius: '8px', 
+                    fontSize: '8px',
+                    fontWeight: 'bold'
+                  }}>
+                    FREE
+                  </span>
+                )}
               </div>
             </div>
             

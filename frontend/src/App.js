@@ -11,11 +11,14 @@ import AgentCards from './components/AgentCards';
 import AgentDetails from './components/AgentDetails';
 import Header from './components/Header';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
+import ItemToolbar from './components/ItemToolbar';
+import ExperimentMilestones from './components/ExperimentMilestones';
 import './App.css';
 
 function App() {
   const { connect, disconnect, isConnected, worldState } = useWorldStore();
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
   
   // Handle ESC key to close modal
   useEffect(() => {
@@ -130,7 +133,7 @@ function App() {
         
         {/* Center Panel */}
         <div className="center-panel">
-          <MapView />
+          <MapView selectedItem={selectedItem} onItemPlace={() => setSelectedItem(null)} />
         </div>
         
         {/* Right Panel */}
@@ -156,6 +159,16 @@ function App() {
           </span>
         )}
       </div>
+      
+      {/* Item Toolbar */}
+      <ItemToolbar 
+        selectedItem={selectedItem}
+        onItemSelect={setSelectedItem}
+        onClearSelection={() => setSelectedItem(null)}
+      />
+      
+      {/* Experiment Milestones */}
+      <ExperimentMilestones />
     </div>
   );
 }

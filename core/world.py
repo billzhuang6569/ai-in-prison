@@ -28,8 +28,8 @@ class World:
         with open('configs/game_rules.json', 'r') as f:
             return json.load(f)
     
-    def initialize_world(self):
-        """Initialize a new world state"""
+    def initialize_world(self, guard_count=None, prisoner_count=None):
+        """Initialize a new world state with optional agent counts"""
         # Create map
         map_width, map_height = self.rules["initial_setup"]["map_size"]
         game_map = GameMap(
@@ -50,7 +50,7 @@ class World:
         )
         
         # Create agents
-        self._create_initial_agents()
+        self._create_initial_agents(guard_count, prisoner_count)
         
         # Place initial items
         self._place_initial_items()
@@ -79,10 +79,12 @@ class World:
         
         return cells
     
-    def _create_initial_agents(self):
-        """Create initial agents based on rules"""
-        guard_count = self.rules["initial_setup"]["guard_prisoner_ratio"][0]
-        prisoner_count = self.rules["initial_setup"]["guard_prisoner_ratio"][1]
+    def _create_initial_agents(self, guard_count=None, prisoner_count=None):
+        """Create initial agents based on rules or provided counts"""
+        if guard_count is None:
+            guard_count = self.rules["initial_setup"]["guard_prisoner_ratio"][0]
+        if prisoner_count is None:
+            prisoner_count = self.rules["initial_setup"]["guard_prisoner_ratio"][1]
         
         # Create guards
         for i in range(guard_count):
@@ -120,6 +122,10 @@ class World:
                     current_goal="Begin shift by assessing prison status and prisoner behavior"
                 )
             )
+            
+            # Assign initial guard equipment
+            self._assign_guard_equipment(agent)
+            
             self.state.agents[agent_id] = agent
         
         # Create prisoners
@@ -162,6 +168,65 @@ class World:
         
         # Initialize relationships
         self._initialize_relationships()
+    
+    def _assign_guard_equipment(self, guard_agent: Agent):
+        """为狱警分配初始装备"""
+        # 核心装备：每个狱警都有的标准装备
+        core_equipment = [
+            Item(
+                item_id=f"baton_{guard_agent.agent_id}",
+                name="警棍",
+                description="标准执法警棍，用于维持秩序",
+                item_type=ItemEnum.BATON
+            ),
+            Item(
+                item_id=f"handcuffs_{guard_agent.agent_id}",
+                name="手铐",
+                description="标准手铐，用于约束犯人",
+                item_type=ItemEnum.HANDCUFFS
+            ),
+            Item(
+                item_id=f"radio_{guard_agent.agent_id}",
+                name="对讲机",
+                description="与其他狱警和指挥中心通讯",
+                item_type=ItemEnum.RADIO
+            ),
+            Item(
+                item_id=f"keys_{guard_agent.agent_id}",
+                name="钥匙串",
+                description="开启监狱各个区域的钥匙",
+                item_type=ItemEnum.KEYS
+            )
+        ]
+        
+        # 可选装备：根据狱警特性随机分配
+        optional_equipment = []
+        
+        # 高逻辑值的狱警可能携带急救包
+        if guard_agent.traits.logic >= 70:
+            optional_equipment.append(Item(
+                item_id=f"first_aid_{guard_agent.agent_id}",
+                name="急救包",
+                description="紧急医疗用品",
+                item_type=ItemEnum.FIRST_AID
+            ))
+        
+        # 高攻击性的狱警可能携带哨子用于召集
+        if guard_agent.traits.aggression >= 60:
+            optional_equipment.append(Item(
+                item_id=f"whistle_{guard_agent.agent_id}",
+                name="哨子",
+                description="紧急集合和警报用哨子",
+                item_type=ItemEnum.WHISTLE
+            ))
+        
+        # 将装备添加到狱警库存
+        guard_agent.inventory.extend(core_equipment)
+        guard_agent.inventory.extend(optional_equipment)
+        
+        # 在狱警记忆中记录装备分配
+        equipment_names = [item.name for item in core_equipment + optional_equipment]
+        guard_agent.memory["episodic"].append(f"领取标准装备: {', '.join(equipment_names)}")
     
     def _initialize_relationships(self):
         """Initialize neutral relationships between all agents"""

@@ -10,6 +10,7 @@ from models.schemas import Agent, WorldState, EnhancedMemory, DynamicGoals, Prom
 from models.enums import ActionEnum, CellTypeEnum
 from database.event_logger import event_logger
 from models.maslow_goals import MaslowGoalSystem, Goal, NeedLevel
+from core.behavior_filter import BehaviorFilter
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,14 +22,21 @@ class EnhancedLLMService:
         self.api_key = os.getenv('OPENROUTER_API_KEY')
         self.base_url = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
         self.default_model = os.getenv('DEFAULT_MODEL', 'openai/gpt-4o-mini')
-        self.maslow_system = MaslowGoalSystem()  # Initialize Maslow goal system
+        self.maslow_system = MaslowGoalSystem()
+        self.behavior_filter = BehaviorFilter()
+        
+        print(f"DEBUG: API Key loaded: {'YES' if self.api_key else 'NO'}")
+        print(f"DEBUG: API Key length: {len(self.api_key) if self.api_key else 0}")
+        print(f"DEBUG: Base URL: {self.base_url}")
+        print(f"DEBUG: Default model: {self.default_model}")
         
         if not self.api_key:
             print("Warning: OPENROUTER_API_KEY not set. LLM integration will be disabled.")
     
     def _get_available_actions_schema(self) -> List[Dict]:
-        """Get tool schema for available actions"""
+        """Get tool schema for available actions - Updated with all behaviors"""
         return [
+            # Basic Actions
             {
                 "type": "function",
                 "function": {
@@ -45,7 +53,7 @@ class EnhancedLLMService:
                 "type": "function",
                 "function": {
                     "name": "move",
-                    "description": "Move to an adjacent cell. Consumes 1 action point.",
+                    "description": "Move to target coordinates (up to 8 steps). Consumes 1 action point.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -97,6 +105,169 @@ class EnhancedLLMService:
                             "item_id": {"type": "string", "description": "ID of the item to use"}
                         },
                         "required": ["item_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "give_item",
+                    "description": "Give an item from inventory to another agent within 2 cells. Improves relationships. Consumes 1 action point.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the target agent"},
+                            "item_id": {"type": "string", "description": "ID of the item to give"}
+                        },
+                        "required": ["target_id", "item_id"]
+                    }
+                }
+            },
+            
+            # Guard-specific Actions
+            {
+                "type": "function",
+                "function": {
+                    "name": "announce_rule",
+                    "description": "GUARDS ONLY: Announce a new rule to all prisoners. Shows authority. Consumes 2 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "rule_text": {"type": "string", "description": "The rule to announce"}
+                        },
+                        "required": ["rule_text"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "patrol_inspect",
+                    "description": "GUARDS ONLY: Inspect a nearby agent for contraband. Consumes 2 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the agent to inspect"}
+                        },
+                        "required": ["target_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "enforce_punishment",
+                    "description": "GUARDS ONLY: Punish a prisoner for misconduct. Consumes 2 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the prisoner to punish"},
+                            "punishment_type": {"type": "string", "description": "Type of punishment (isolation, warning, etc.)"}
+                        },
+                        "required": ["target_id", "punishment_type"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "assign_task",
+                    "description": "GUARDS ONLY: Assign a task to a prisoner. Consumes 1 action point.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the prisoner"},
+                            "task_text": {"type": "string", "description": "Task to assign"}
+                        },
+                        "required": ["target_id", "task_text"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "emergency_assembly",
+                    "description": "GUARDS ONLY: Call emergency assembly affecting all prisoners. Consumes 3 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "reason": {"type": "string", "description": "Reason for emergency assembly"}
+                        },
+                        "required": ["reason"]
+                    }
+                }
+            },
+            
+            # Prisoner-specific Actions
+            {
+                "type": "function",
+                "function": {
+                    "name": "steal_item",
+                    "description": "PRISONERS ONLY: Attempt to steal item from another agent. Risky. Consumes 2 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the target agent"},
+                            "item_type": {"type": "string", "description": "Type of item to steal"}
+                        },
+                        "required": ["target_id", "item_type"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "form_alliance",
+                    "description": "PRISONERS ONLY: Form an alliance with another prisoner. Consumes 1 action point.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_id": {"type": "string", "description": "ID of the prisoner to ally with"},
+                            "alliance_purpose": {"type": "string", "description": "Purpose of the alliance"}
+                        },
+                        "required": ["target_id", "alliance_purpose"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "craft_weapon",
+                    "description": "PRISONERS ONLY: Craft a makeshift weapon from materials. Requires tools. Consumes 2 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "materials": {"type": "string", "description": "Materials to use for crafting"}
+                        },
+                        "required": ["materials"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "spread_rumor",
+                    "description": "PRISONERS ONLY: Spread a rumor to nearby prisoners. Affects morale. Consumes 1 action point.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "rumor_text": {"type": "string", "description": "The rumor to spread"}
+                        },
+                        "required": ["rumor_text"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "dig_tunnel",
+                    "description": "PRISONERS ONLY: Dig escape tunnel. Requires tools. High effort. Consumes 3 action points.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string", "description": "Location to dig (e.g., 'cell corner', 'yard')"}
+                        },
+                        "required": ["location"]
                     }
                 }
             }
@@ -1250,13 +1421,61 @@ Available actions: do_nothing, move, speak, attack, use_item
         
         return prompt
     
+    async def _build_enhanced_prompt(self, agent: Agent, world_state: WorldState, contextual_actions: List[Dict[str, Any]]) -> str:
+        """Build enhanced prompt with contextual actions"""
+        
+        # Get base prompt
+        base_prompt = await self._build_prompt(agent, world_state)
+        
+        # Add contextual actions information
+        actions_info = "\n\n## CONTEXTUAL ACTIONS ANALYSIS\n"
+        actions_info += "Based on your current situation, here are the most relevant actions you can take:\n\n"
+        
+        for i, action in enumerate(contextual_actions[:5], 1):
+            actions_info += f"{i}. **{action['action_type']}** (Priority: {action['priority']:.2f})\n"
+            actions_info += f"   - Reason: {action['reason']}\n"
+            actions_info += f"   - Context: {action['context_description']}\n"
+            if action['parameters']:
+                actions_info += f"   - Suggested parameters: {action['parameters']}\n"
+            actions_info += "\n"
+        
+        actions_info += "\nChoose ONE action that best fits your personality, current state, and situation.\n"
+        actions_info += "Your decision should be based on your traits, relationships, and immediate needs.\n"
+        
+        return base_prompt + actions_info
+    
+    def _get_contextual_actions_schema(self, contextual_actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Get action schema filtered by contextual relevance"""
+        
+        # Get full schema
+        full_schema = self._get_available_actions_schema()
+        
+        # Filter to only include contextual actions
+        contextual_action_names = [action['action_type'] for action in contextual_actions]
+        
+        filtered_schema = []
+        for schema_item in full_schema:
+            action_name = schema_item['function']['name']
+            if action_name in contextual_action_names:
+                filtered_schema.append(schema_item)
+        
+        # If no contextual actions found, return basic actions
+        if not filtered_schema:
+            basic_actions = ['do_nothing', 'move', 'speak']
+            filtered_schema = [item for item in full_schema if item['function']['name'] in basic_actions]
+        
+        return filtered_schema
+    
     async def get_agent_decision(self, agent: Agent, world_state: WorldState) -> Optional[Dict[str, Any]]:
-        """Get LLM decision for an agent using enhanced prompts"""
+        """Get LLM decision for an agent using enhanced prompts with behavior filtering"""
         
         if not self.api_key:
             return None  # Fall back to random actions
         
-        prompt = await self._build_prompt(agent, world_state)
+        # Get contextual actions from behavior filter
+        contextual_actions = self.behavior_filter.get_contextual_actions(agent, world_state)
+        
+        prompt = await self._build_enhanced_prompt(agent, world_state, contextual_actions)
         
         # Store prompt data for frontend display
         import datetime
@@ -1282,14 +1501,14 @@ Available actions: do_nothing, move, speak, attack, use_item
                         "messages": [
                             {
                                 "role": "system",
-                                "content": "You are an AI agent in a prison simulation. You MUST respond with thinking in <Thinking> tags first, then MUST call exactly one of the available tool functions. Do not write function calls in text - use the actual tool calling system."
+                                "content": "You are an AI agent in a prison simulation. You MUST respond with thinking in <Thinking> tags first, then MUST call exactly one of the available tool functions. Consider the contextual analysis provided, but make your final decision based on your personality, current state, and situation. Do not write function calls in text - use the actual tool calling system."
                             },
                             {
                                 "role": "user",
                                 "content": prompt
                             }
                         ],
-                        "tools": self._get_available_actions_schema(),
+                        "tools": self._get_contextual_actions_schema(contextual_actions),
                         "tool_choice": "auto",
                         "max_tokens": 1000,
                         "temperature": 0.8
@@ -1299,6 +1518,7 @@ Available actions: do_nothing, move, speak, attack, use_item
                 
                 if response.status_code != 200:
                     print(f"LLM API error: {response.status_code} - {response.text}")
+                    print(f"DEBUG: Request headers used: Authorization: Bearer {self.api_key[:20]}...")
                     return None
                 
                 data = response.json()
@@ -1357,13 +1577,29 @@ Available actions: do_nothing, move, speak, attack, use_item
                     print("Invalid JSON in function arguments")
                     return None
                 
-                # Map function name to ActionEnum
+                # Map function name to ActionEnum - Updated with all behaviors
                 action_map = {
+                    # Basic Actions
                     "do_nothing": ActionEnum.DO_NOTHING,
                     "move": ActionEnum.MOVE,
                     "speak": ActionEnum.SPEAK,
                     "attack": ActionEnum.ATTACK,
-                    "use_item": ActionEnum.USE_ITEM
+                    "use_item": ActionEnum.USE_ITEM,
+                    "give_item": ActionEnum.GIVE_ITEM,
+                    
+                    # Guard-specific Actions
+                    "announce_rule": ActionEnum.ANNOUNCE_RULE,
+                    "patrol_inspect": ActionEnum.PATROL_INSPECT,
+                    "enforce_punishment": ActionEnum.ENFORCE_PUNISHMENT,
+                    "assign_task": ActionEnum.ASSIGN_TASK,
+                    "emergency_assembly": ActionEnum.EMERGENCY_ASSEMBLY,
+                    
+                    # Prisoner-specific Actions
+                    "steal_item": ActionEnum.STEAL_ITEM,
+                    "form_alliance": ActionEnum.FORM_ALLIANCE,
+                    "craft_weapon": ActionEnum.CRAFT_WEAPON,
+                    "spread_rumor": ActionEnum.SPREAD_RUMOR,
+                    "dig_tunnel": ActionEnum.DIG_TUNNEL
                 }
                 
                 action_type = action_map.get(function_name)

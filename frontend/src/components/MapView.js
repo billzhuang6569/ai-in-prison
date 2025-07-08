@@ -3,11 +3,66 @@
  */
 import React, { useState, useEffect } from 'react';
 import useWorldStore from '../store/worldStore';
+import { Icon } from '@iconify/react';
 
-function MapView() {
+function MapView({ selectedItem, onItemPlace }) {
   const { worldState, selectedAgent, setSelectedAgent } = useWorldStore();
   const [agentTrajectories, setAgentTrajectories] = useState({});
   const [showTrajectories, setShowTrajectories] = useState(true);
+  
+  // Item icon mapping for map display using Game Icons
+  const itemIconMap = {
+    "food": "game-icons:meal",
+    "water": "game-icons:water-drop",
+    "book": "game-icons:book-cover",
+    "baton": "game-icons:truncheon",
+    "handcuffs": "game-icons:handcuffed",
+    "radio": "game-icons:radio-tower",
+    "keys": "game-icons:key",
+    "first_aid": "game-icons:first-aid-kit",
+    "whistle": "game-icons:whistle",
+    "cigarettes": "game-icons:cigarette",
+    "playing_cards": "game-icons:card-play",
+    "diary": "game-icons:notebook",
+    "spoon": "game-icons:spoon",
+    "bedsheet": "game-icons:bed",
+    "soap": "game-icons:soap",
+    "shiv": "game-icons:switchblade",
+    "rope": "game-icons:rope-coil",
+    "lockpick": "game-icons:lock-picks",
+    "toolbox": "game-icons:toolbox",
+    "chair": "game-icons:chair",
+    "table": "game-icons:table"
+  };
+  
+  // Function to place item on map
+  const placeItemOnMap = async (x, y, item) => {
+    try {
+      const response = await fetch('http://localhost:24861/api/v1/items/place', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: worldState.session_id,
+          x: x,
+          y: y,
+          item_type: item.id,
+          item_name: item.name,
+          item_description: item.description
+        }),
+      });
+      
+      if (response.ok) {
+        console.log(`Placed ${item.name} at (${x}, ${y})`);
+        onItemPlace(); // Clear selection
+      } else {
+        console.error('Failed to place item');
+      }
+    } catch (error) {
+      console.error('Error placing item:', error);
+    }
+  };
   
   // Load and update agent movement trajectories
   useEffect(() => {
@@ -183,9 +238,17 @@ function MapView() {
           key={cellKey}
           className={`map-cell ${cellType}`}
           onClick={() => {
-            if (agentsAtPosition.length > 0) {
+            if (selectedItem && agentsAtPosition.length === 0) {
+              // Place item if one is selected and no agents are at this position
+              placeItemOnMap(x, y, selectedItem);
+            } else if (agentsAtPosition.length > 0) {
+              // Select agent if present
               setSelectedAgent(agentsAtPosition[0].agent_id);
             }
+          }}
+          style={{
+            cursor: selectedItem && agentsAtPosition.length === 0 ? 'crosshair' : 'pointer',
+            backgroundColor: selectedItem && agentsAtPosition.length === 0 ? 'rgba(76, 175, 80, 0.3)' : undefined
           }}
           title={`(${x}, ${y}) - ${cellType}${itemsAtPosition.length > 0 ? ` - ${itemsAtPosition.length} items` : ''}`}
         >
@@ -193,16 +256,50 @@ function MapView() {
           {itemsAtPosition.length > 0 && (
             <div style={{
               position: 'absolute',
-              top: '2px',
-              right: '2px',
-              fontSize: '8px',
-              color: '#fff',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              borderRadius: '2px',
-              padding: '1px 2px',
+              top: '1px',
+              left: '1px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '1px',
+              maxWidth: '28px',
+              maxHeight: '14px',
+              overflow: 'hidden',
               zIndex: 2
             }}>
-              {itemsAtPosition.length}
+              {itemsAtPosition.slice(0, 4).map((item, index) => (
+                <div
+                  key={`${item.item_id || index}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: '1'
+                  }}
+                  title={`${item.name}: ${item.description}`}
+                >
+                  <Icon 
+                    icon={itemIconMap[item.item_type] || 'game-icons:questioned-badge'} 
+                    width="8" 
+                    height="8" 
+                    style={{ 
+                      color: '#FFD700',
+                      filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.8))'
+                    }} 
+                  />
+                </div>
+              ))}
+              {itemsAtPosition.length > 4 && (
+                <div style={{
+                  fontSize: '6px',
+                  color: '#fff',
+                  backgroundColor: 'rgba(255,0,0,0.7)',
+                  borderRadius: '2px',
+                  padding: '0 1px',
+                  lineHeight: '1'
+                }}>
+                  +{itemsAtPosition.length - 4}
+                </div>
+              )}
             </div>
           )}
           
@@ -233,7 +330,7 @@ function MapView() {
                   fontSize: '7px',
                   fontWeight: 'bold'
                 }}
-                title={`${agent.name} (${agent.role})\nHP: ${agent.hp}, Sanity: ${agent.sanity}\nPosition: (${agent.position[0]}, ${agent.position[1]})`}
+                title={`${agent.name} (${agent.role})\nHP: ${agent.hp}, Sanity: ${agent.sanity}, Hunger: ${agent.hunger}, Thirst: ${agent.thirst}\nPosition: (${agent.position[0]}, ${agent.position[1]})\nInventory: ${agent.inventory && agent.inventory.length > 0 ? agent.inventory.map(item => item.name).join(', ') : '空'}`}
               >
                 {label}
               </div>

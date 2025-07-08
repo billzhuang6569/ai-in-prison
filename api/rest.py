@@ -20,6 +20,9 @@ class ExperimentConfig(BaseModel):
     """Configuration for starting an experiment"""
     duration_days: int = 14
     agent_count: int = 6
+    guard_count: int = 2
+    prisoner_count: int = 4
+    model: str = "openai/gpt-4o-mini"
     
 class InterventionRequest(BaseModel):
     """Request to intervene on an agent"""
@@ -51,8 +54,16 @@ async def api_root():
 async def start_experiment(config: ExperimentConfig = ExperimentConfig()):
     """Start a new experiment"""
     try:
-        await manager.start_experiment()
-        return {"message": "Experiment started successfully", "config": config.dict()}
+        # Configure the LLM model before starting
+        manager.game_engine.set_model(config.model)
+        
+        # Pass guard_count and prisoner_count to the experiment
+        await manager.start_experiment(config.guard_count, config.prisoner_count)
+        return {
+            "message": "Experiment started successfully", 
+            "config": config.dict(),
+            "model_set": config.model
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -664,4 +675,123 @@ async def get_session_summary(session_id: str):
         "event_types": event_types,
         "daily_activity": daily_activity,
         "agent_interactions": agent_interactions
+    }
+
+class ItemPlacementRequest(BaseModel):
+    """Request to place an item on the map"""
+    session_id: str
+    x: int
+    y: int
+    item_type: str
+    item_name: str
+    item_description: str
+
+@router.post("/items/place")
+async def place_item(request: ItemPlacementRequest):
+    """Place an item on the map at specified coordinates"""
+    try:
+        world_state = manager.game_engine.get_world_state()
+        
+        if not world_state:
+            raise HTTPException(status_code=404, detail="World not initialized")
+        
+        if world_state.session_id != request.session_id:
+            raise HTTPException(status_code=400, detail="Session ID mismatch")
+        
+        # Check if coordinates are valid
+        if (request.x < 0 or request.x >= world_state.game_map.width or 
+            request.y < 0 or request.y >= world_state.game_map.height):
+            raise HTTPException(status_code=400, detail="Invalid coordinates")
+        
+        # Import Item class and ItemEnum
+        from models.schemas import Item
+        from models.enums import ItemEnum
+        import uuid
+        
+        # Create the item
+        try:
+            item_enum = ItemEnum(request.item_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid item type: {request.item_type}")
+        
+        new_item = Item(
+            item_id=f"{request.item_type}_{uuid.uuid4().hex[:8]}",
+            name=request.item_name,
+            description=request.item_description,
+            item_type=item_enum
+        )
+        
+        # Add item to map
+        position_key = f"{request.x},{request.y}"
+        if position_key not in world_state.game_map.items:
+            world_state.game_map.items[position_key] = []
+        
+        world_state.game_map.items[position_key].append(new_item)
+        
+        # Log the item placement event
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id="SYSTEM",
+            agent_name="Research Team",
+            event_type="item_placement",
+            description=f"研究人员在({request.x}, {request.y})放置了{request.item_name}",
+            details=json.dumps({
+                "item_id": new_item.item_id,
+                "item_type": request.item_type,
+                "position": [request.x, request.y],
+                "placed_by": "research_team"
+            })
+        )
+        
+        # Add to world event log
+        world_state.event_log.append(f"🔬 研究人员在({request.x}, {request.y})放置了{request.item_name}")
+        
+        # Broadcast the updated world state
+        await manager.broadcast_world_state()
+        
+        return {
+            "message": f"Successfully placed {request.item_name} at ({request.x}, {request.y})",
+            "item_id": new_item.item_id,
+            "position": [request.x, request.y]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to place item: {str(e)}")
+
+@router.get("/items/map")
+async def get_map_items(session_id: Optional[str] = None):
+    """Get all items currently on the map"""
+    world_state = manager.game_engine.get_world_state()
+    
+    if not world_state:
+        raise HTTPException(status_code=404, detail="World not initialized")
+    
+    if session_id and world_state.session_id != session_id:
+        raise HTTPException(status_code=400, detail="Session ID mismatch")
+    
+    # Format items with their positions
+    items_by_position = {}
+    for position_key, items in world_state.game_map.items.items():
+        x, y = map(int, position_key.split(','))
+        items_by_position[position_key] = {
+            "position": [x, y],
+            "items": [
+                {
+                    "item_id": item.item_id,
+                    "name": item.name,
+                    "description": item.description,
+                    "item_type": item.item_type.value
+                }
+                for item in items
+            ]
+        }
+    
+    return {
+        "session_id": world_state.session_id,
+        "map_size": [world_state.game_map.width, world_state.game_map.height],
+        "items_by_position": items_by_position,
+        "total_items": sum(len(items) for items in world_state.game_map.items.values())
     }

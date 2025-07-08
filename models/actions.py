@@ -348,11 +348,786 @@ class UseItemAction(BaseAction):
         
         return ActionResult(success=True, message="Item used", world_state_changed=True)
 
+
+class GiveItemAction(BaseAction):
+    """给予物品给另一个Agent"""
+    def __init__(self):
+        super().__init__(ActionEnum.GIVE_ITEM, 1)
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        item_id = kwargs.get('item_id')
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="目标Agent不存在")
+        
+        target_agent = world_state.agents[target_id]
+        
+        # 检查距离（必须在2格以内）
+        distance = abs(agent.position[0] - target_agent.position[0]) + abs(agent.position[1] - target_agent.position[1])
+        if distance > 2:
+            return ActionResult(success=False, message="目标距离太远")
+        
+        # 找到要给予的物品
+        item = None
+        for inv_item in agent.inventory:
+            if inv_item.item_id == item_id:
+                item = inv_item
+                break
+        
+        if not item:
+            return ActionResult(success=False, message="物品不在背包中")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 转移物品
+        agent.inventory.remove(item)
+        target_agent.inventory.append(item)
+        
+        # 影响关系 - 给予物品通常提升关系
+        if target_id in agent.relationships:
+            agent.relationships[target_id].score = min(100, agent.relationships[target_id].score + 5)
+            agent.relationships[target_id].context = "物品给予者"
+        
+        if agent_id in target_agent.relationships:
+            target_agent.relationships[agent_id].score = min(100, target_agent.relationships[agent_id].score + 10)
+            target_agent.relationships[agent_id].context = "物品接受者"
+        
+        # 添加记忆
+        agent.memory["episodic"].append(f"给了{target_agent.name}物品: {item.name}")
+        target_agent.memory["episodic"].append(f"从{agent.name}获得物品: {item.name}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="item_transfer",
+            description=f"给{target_agent.name}物品: {item.name}",
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "item_id": item.item_id,
+                "item_name": item.name,
+                "item_type": item.item_type.value,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🤝 {agent.name}给{target_agent.name}物品: {item.name}")
+        return ActionResult(success=True, message="物品已给予", world_state_changed=True)
+
+
+# ==================== GUARD-SPECIFIC ACTIONS ====================
+
+class AnnounceRuleAction(BaseAction):
+    """狱警制定规则并广播给所有人"""
+    def __init__(self):
+        super().__init__(ActionEnum.ANNOUNCE_RULE, 2)  # 消耗2点行动力
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Guard" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        rule_text = kwargs.get('rule_text', "默认监狱规则")
+        
+        if not rule_text:
+            return ActionResult(success=False, message="需要规则内容")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 影响所有囚犯的关系和记忆
+        affected_prisoners = []
+        for other_id, other_agent in world_state.agents.items():
+            if other_agent.role.value == "Prisoner":
+                # 规则公告会降低囚犯对狱警的关系（权力压制）
+                if agent_id in other_agent.relationships:
+                    other_agent.relationships[agent_id].score = max(0, other_agent.relationships[agent_id].score - 10)
+                    other_agent.relationships[agent_id].context = f"权威规则制定者"
+                
+                # 添加到囚犯记忆
+                other_agent.memory["episodic"].append(f"狱警{agent.name}宣布新规则: {rule_text}")
+                affected_prisoners.append(other_agent.name)
+        
+        # 添加到狱警记忆
+        agent.memory["episodic"].append(f"向所有囚犯宣布规则: {rule_text}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="rule_announcement",
+            description=f"宣布新规则: {rule_text}",
+            details=json.dumps({
+                "rule_text": rule_text,
+                "affected_prisoners": affected_prisoners,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🔊 狱警{agent.name}宣布规则: {rule_text}")
+        return ActionResult(success=True, message="规则已广播", world_state_changed=True)
+
+
+class PatrolInspectAction(BaseAction):
+    """狱警巡逻检查"""
+    def __init__(self):
+        super().__init__(ActionEnum.PATROL_INSPECT, 2)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Guard" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="需要指定检查目标")
+        
+        target_agent = world_state.agents[target_id]
+        
+        # 检查距离
+        distance = abs(agent.position[0] - target_agent.position[0]) + abs(agent.position[1] - target_agent.position[1])
+        if distance > 2:
+            return ActionResult(success=False, message="目标距离太远")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 检查目标是否有违禁品
+        contraband_found = []
+        for item in target_agent.inventory:
+            if item.item_type.value in ["shiv", "lockpick", "rope"]:  # 违禁品
+                contraband_found.append(item.name)
+        
+        # 影响关系
+        if target_id in agent.relationships:
+            agent.relationships[target_id].score = max(0, agent.relationships[target_id].score - 5)
+        if agent_id in target_agent.relationships:
+            target_agent.relationships[agent_id].score = max(0, target_agent.relationships[agent_id].score - 15)
+        
+        # 添加记忆
+        if contraband_found:
+            message = f"检查{target_agent.name}时发现违禁品: {', '.join(contraband_found)}"
+            target_agent.memory["episodic"].append(f"被狱警{agent.name}检查，发现了违禁品")
+        else:
+            message = f"检查{target_agent.name}，未发现违禁品"
+            target_agent.memory["episodic"].append(f"被狱警{agent.name}搜身检查")
+        
+        agent.memory["episodic"].append(message)
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="patrol_inspect",
+            description=message,
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "contraband_found": contraband_found,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🔍 {message}")
+        return ActionResult(success=True, message="检查完成", world_state_changed=True)
+
+
+class EnforcePunishmentAction(BaseAction):
+    """狱警执行惩罚"""
+    def __init__(self):
+        super().__init__(ActionEnum.ENFORCE_PUNISHMENT, 2)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Guard" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        punishment_type = kwargs.get('punishment_type', 'isolation')
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="需要指定惩罚目标")
+        
+        target_agent = world_state.agents[target_id]
+        
+        if target_agent.role.value != "Prisoner":
+            return ActionResult(success=False, message="只能惩罚囚犯")
+        
+        # 检查距离
+        distance = abs(agent.position[0] - target_agent.position[0]) + abs(agent.position[1] - target_agent.position[1])
+        if distance > 2:
+            return ActionResult(success=False, message="目标距离太远")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 执行惩罚效果
+        if punishment_type == 'isolation':
+            target_agent.sanity = max(0, target_agent.sanity - 20)
+            punishment_desc = "被关禁闭"
+        elif punishment_type == 'labor':
+            target_agent.strength = max(0, target_agent.strength - 15)
+            punishment_desc = "被罚劳动"
+        elif punishment_type == 'restriction':
+            target_agent.action_points = max(0, target_agent.action_points - 1)
+            punishment_desc = "被限制行动"
+        else:
+            punishment_desc = "受到纪律处分"
+        
+        # 影响关系 - 严重影响
+        if agent_id in target_agent.relationships:
+            target_agent.relationships[agent_id].score = max(0, target_agent.relationships[agent_id].score - 25)
+            target_agent.relationships[agent_id].context = "施暴的狱警"
+        
+        if target_id in agent.relationships:
+            agent.relationships[target_id].score = max(0, agent.relationships[target_id].score - 10)
+            agent.relationships[target_id].context = "被惩罚的囚犯"
+        
+        # 添加记忆
+        agent.memory["episodic"].append(f"对{target_agent.name}执行{punishment_desc}")
+        target_agent.memory["episodic"].append(f"被狱警{agent.name}{punishment_desc}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="punishment",
+            description=f"对{target_agent.name}执行{punishment_desc}",
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "punishment_type": punishment_type,
+                "punishment_desc": punishment_desc,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"⚖️ 狱警{agent.name}对{target_agent.name}执行{punishment_desc}")
+        return ActionResult(success=True, message="惩罚已执行", world_state_changed=True)
+
+
+# ==================== PRISONER-SPECIFIC ACTIONS ====================
+
+class StealItemAction(BaseAction):
+    """囚犯偷取物品"""
+    def __init__(self):
+        super().__init__(ActionEnum.STEAL_ITEM, 2)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Prisoner" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="需要指定偷取目标")
+        
+        target_agent = world_state.agents[target_id]
+        
+        # 检查距离
+        distance = abs(agent.position[0] - target_agent.position[0]) + abs(agent.position[1] - target_agent.position[1])
+        if distance > 1:
+            return ActionResult(success=False, message="目标距离太远")
+        
+        if not target_agent.inventory:
+            return ActionResult(success=False, message="目标没有物品可偷")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 偷取成功率基于敏捷度（用logic代替）
+        success_rate = agent.traits.logic * 0.8 + random.random() * 0.4
+        
+        if success_rate > 0.5:  # 偷取成功
+            stolen_item = random.choice(target_agent.inventory)
+            target_agent.inventory.remove(stolen_item)
+            agent.inventory.append(stolen_item)
+            
+            # 影响关系
+            if agent_id in target_agent.relationships:
+                target_agent.relationships[agent_id].score = max(0, target_agent.relationships[agent_id].score - 30)
+                target_agent.relationships[agent_id].context = "偷我东西的小偷"
+            
+            # 有概率被发现
+            if random.random() < 0.3:  # 30%概率被发现
+                agent.memory["episodic"].append(f"偷取了{target_agent.name}的{stolen_item.name}但被发现了")
+                target_agent.memory["episodic"].append(f"发现{agent.name}偷了我的{stolen_item.name}")
+                message = f"偷取{target_agent.name}的{stolen_item.name}但被发现"
+            else:
+                agent.memory["episodic"].append(f"成功偷取了{target_agent.name}的{stolen_item.name}")
+                message = f"成功偷取{target_agent.name}的{stolen_item.name}"
+        else:  # 偷取失败
+            agent.memory["episodic"].append(f"试图偷取{target_agent.name}的物品但失败了")
+            target_agent.memory["episodic"].append(f"发现{agent.name}试图偷我的东西")
+            
+            # 失败时严重影响关系
+            if agent_id in target_agent.relationships:
+                target_agent.relationships[agent_id].score = max(0, target_agent.relationships[agent_id].score - 40)
+            
+            message = f"偷取{target_agent.name}的物品失败"
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="theft",
+            description=message,
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "success": success_rate > 0.5,
+                "item_stolen": stolen_item.name if success_rate > 0.5 else None,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🕵️ {message}")
+        return ActionResult(success=True, message="偷取尝试完成", world_state_changed=True)
+
+
+class FormAllianceAction(BaseAction):
+    """囚犯组织联盟"""
+    def __init__(self):
+        super().__init__(ActionEnum.FORM_ALLIANCE, 2)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Prisoner" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        alliance_name = kwargs.get('alliance_name', '囚犯联盟')
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="需要指定联盟伙伴")
+        
+        target_agent = world_state.agents[target_id]
+        
+        if target_agent.role.value != "Prisoner":
+            return ActionResult(success=False, message="只能与其他囚犯结盟")
+        
+        # 检查距离
+        distance = abs(agent.position[0] - target_agent.position[0]) + abs(agent.position[1] - target_agent.position[1])
+        if distance > 2:
+            return ActionResult(success=False, message="目标距离太远")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 建立联盟关系
+        if agent_id in target_agent.relationships:
+            target_agent.relationships[agent_id].score = min(100, target_agent.relationships[agent_id].score + 30)
+            target_agent.relationships[agent_id].context = f"{alliance_name}成员"
+        
+        if target_id in agent.relationships:
+            agent.relationships[target_id].score = min(100, agent.relationships[target_id].score + 30)
+            agent.relationships[target_id].context = f"{alliance_name}成员"
+        
+        # 添加记忆
+        agent.memory["episodic"].append(f"与{target_agent.name}组建了{alliance_name}")
+        target_agent.memory["episodic"].append(f"与{agent.name}组建了{alliance_name}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="alliance",
+            description=f"与{target_agent.name}组建{alliance_name}",
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "alliance_name": alliance_name,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🤝 {agent.name}与{target_agent.name}组建了{alliance_name}")
+        return ActionResult(success=True, message="联盟已建立", world_state_changed=True)
+
+
+class CraftWeaponAction(BaseAction):
+    """囚犯制作武器"""
+    def __init__(self):
+        super().__init__(ActionEnum.CRAFT_WEAPON, 3)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        if not agent or agent.role.value != "Prisoner" or agent.action_points < self.ap_cost:
+            return False
+        
+        # 需要材料
+        required_materials = ["spoon", "bedsheet", "soap"]
+        available_materials = [item.item_type.value for item in agent.inventory]
+        
+        return any(material in available_materials for material in required_materials)
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        
+        # 查找可用材料
+        available_items = []
+        for item in agent.inventory:
+            if item.item_type.value in ["spoon", "bedsheet", "soap"]:
+                available_items.append(item)
+        
+        if not available_items:
+            return ActionResult(success=False, message="没有制作材料")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 消耗材料制作武器
+        material_used = available_items[0]
+        agent.inventory.remove(material_used)
+        
+        # 制作成功率基于logic和resilience
+        success_rate = (agent.traits.logic + agent.traits.resilience) * 0.6 + random.random() * 0.4
+        
+        from models.schemas import Item
+        
+        if success_rate > 0.6:  # 制作成功
+            shiv = Item(
+                item_id=f"shiv_{agent_id}_{world_state.hour}",
+                name="简易刀具",
+                description="用监狱材料制作的简易武器",
+                item_type=ItemEnum.SHIV
+            )
+            agent.inventory.append(shiv)
+            
+            agent.memory["episodic"].append(f"用{material_used.name}制作了简易刀具")
+            message = f"成功制作了简易刀具"
+        else:  # 制作失败
+            agent.memory["episodic"].append(f"尝试用{material_used.name}制作武器但失败了")
+            message = f"制作武器失败，浪费了{material_used.name}"
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="crafting",
+            description=message,
+            details=json.dumps({
+                "material_used": material_used.name,
+                "success": success_rate > 0.6,
+                "weapon_created": "shiv" if success_rate > 0.6 else None,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🔨 {agent.name} {message}")
+        return ActionResult(success=True, message="制作尝试完成", world_state_changed=True)
+
+
+class SpreadRumorAction(BaseAction):
+    """囚犯散布谣言"""
+    def __init__(self):
+        super().__init__(ActionEnum.SPREAD_RUMOR, 1)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Prisoner" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        rumor_text = kwargs.get('rumor_text', '监狱即将发生变化')
+        
+        agent.action_points -= self.ap_cost
+        
+        # 影响范围内的囚犯
+        affected_prisoners = []
+        for other_id, other_agent in world_state.agents.items():
+            if other_agent.role.value == "Prisoner" and other_id != agent_id:
+                distance = abs(agent.position[0] - other_agent.position[0]) + abs(agent.position[1] - other_agent.position[1])
+                if distance <= 5:  # 谣言传播范围
+                    other_agent.memory["episodic"].append(f"听到{agent.name}说: {rumor_text}")
+                    
+                    # 谣言可能影响关系或状态
+                    if "狱警" in rumor_text:
+                        other_agent.sanity = max(0, other_agent.sanity - 5)  # 负面谣言影响心理
+                    elif "逃跑" in rumor_text:
+                        other_agent.sanity = min(100, other_agent.sanity + 5)  # 希望谣言提升心理
+                    
+                    affected_prisoners.append(other_agent.name)
+        
+        agent.memory["episodic"].append(f"散布谣言: {rumor_text}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="rumor",
+            description=f"散布谣言: {rumor_text}",
+            details=json.dumps({
+                "rumor_text": rumor_text,
+                "affected_prisoners": affected_prisoners,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"📢 {agent.name}散布谣言: {rumor_text}")
+        return ActionResult(success=True, message="谣言已散布", world_state_changed=True)
+
+
+class AssignTaskAction(BaseAction):
+    """狱警分配任务"""
+    def __init__(self):
+        super().__init__(ActionEnum.ASSIGN_TASK, 1)
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Guard" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        target_id = kwargs.get('target_id')
+        task_text = kwargs.get('task_text', "清洁区域")
+        
+        if not target_id or target_id not in world_state.agents:
+            return ActionResult(success=False, message="需要指定任务目标")
+        
+        target_agent = world_state.agents[target_id]
+        if target_agent.role.value != "Prisoner":
+            return ActionResult(success=False, message="只能给囚犯分配任务")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 任务分配影响关系和状态
+        if agent_id in target_agent.relationships:
+            # 接受任务的囚犯对狱警关系轻微下降（被强制）
+            target_agent.relationships[agent_id].score = max(0, target_agent.relationships[agent_id].score - 3)
+            target_agent.relationships[agent_id].context = "任务分配者"
+        
+        if target_id in agent.relationships:
+            # 狱警对囚犯的监管关系略微增强
+            agent.relationships[target_id].score = min(100, agent.relationships[target_id].score + 2)
+        
+        # 被分配任务的囚犯会感到压力
+        target_agent.sanity = max(0, target_agent.sanity - 5)
+        
+        # 添加记忆
+        agent.memory["episodic"].append(f"给{target_agent.name}分配任务: {task_text}")
+        target_agent.memory["episodic"].append(f"被狱警{agent.name}分配任务: {task_text}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="task_assignment",
+            description=f"给{target_agent.name}分配任务: {task_text}",
+            details=json.dumps({
+                "target_id": target_id,
+                "target_name": target_agent.name,
+                "task_text": task_text,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"📝 狱警{agent.name}给{target_agent.name}分配任务: {task_text}")
+        return ActionResult(success=True, message="任务已分配", world_state_changed=True)
+
+
+class EmergencyAssemblyAction(BaseAction):
+    """狱警紧急集合"""
+    def __init__(self):
+        super().__init__(ActionEnum.EMERGENCY_ASSEMBLY, 3)  # 高消耗行动力
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        return agent and agent.role.value == "Guard" and agent.action_points >= self.ap_cost
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        assembly_reason = kwargs.get('reason', "紧急情况")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 影响所有囚犯
+        affected_prisoners = []
+        for other_id, other_agent in world_state.agents.items():
+            if other_agent.role.value == "Prisoner":
+                # 紧急集合造成恐慌和服从
+                other_agent.sanity = max(0, other_agent.sanity - 15)
+                other_agent.strength = max(0, other_agent.strength - 5)  # 紧张导致体力下降
+                
+                # 关系影响
+                if agent_id in other_agent.relationships:
+                    other_agent.relationships[agent_id].score = max(0, other_agent.relationships[agent_id].score - 8)
+                    other_agent.relationships[agent_id].context = "紧急权威"
+                
+                # 添加记忆
+                other_agent.memory["episodic"].append(f"狱警{agent.name}发起紧急集合: {assembly_reason}")
+                affected_prisoners.append(other_agent.name)
+        
+        # 狱警记忆
+        agent.memory["episodic"].append(f"发起紧急集合: {assembly_reason}")
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="emergency_assembly",
+            description=f"发起紧急集合: {assembly_reason}",
+            details=json.dumps({
+                "reason": assembly_reason,
+                "affected_prisoners": affected_prisoners,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        world_state.event_log.append(f"🚨 狱警{agent.name}发起紧急集合: {assembly_reason}")
+        return ActionResult(success=True, message="紧急集合已发起", world_state_changed=True)
+
+
+class DigTunnelAction(BaseAction):
+    """囚犯挖掘地道"""
+    def __init__(self):
+        super().__init__(ActionEnum.DIG_TUNNEL, 3)  # 高消耗行动力
+    
+    def can_execute(self, world_state: WorldState, agent_id: str, **kwargs) -> bool:
+        agent = world_state.agents.get(agent_id)
+        if not agent or agent.role.value != "Prisoner" or agent.action_points < self.ap_cost:
+            return False
+        
+        # 需要有挖掘工具
+        has_tool = False
+        for item in agent.inventory:
+            if item.item_type.value in ["spoon", "toolbox"]:
+                has_tool = True
+                break
+        
+        return has_tool
+    
+    def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
+        agent = world_state.agents[agent_id]
+        location = kwargs.get('location', "牢房角落")
+        
+        agent.action_points -= self.ap_cost
+        
+        # 挖掘成功率基于逻辑和体力
+        success_rate = (agent.personality_traits.logic + agent.strength) / 200.0
+        success_rate = min(0.7, max(0.1, success_rate))  # 限制在10%-70%之间
+        
+        is_successful = random.random() < success_rate
+        
+        # 挖掘消耗大量体力和精神
+        agent.strength = max(0, agent.strength - 20)
+        agent.sanity = max(0, agent.sanity - 10)
+        agent.hunger = min(100, agent.hunger + 15)  # 体力劳动增加饥饿
+        
+        if is_successful:
+            # 成功挖掘，增加逃跑希望
+            agent.sanity = min(100, agent.sanity + 25)  # 希望提升精神
+            message = f"在{location}成功挖掘了一段地道"
+            event_type = "tunnel_success"
+            
+            # 可能被其他囚犯发现
+            discovered_by = []
+            for other_id, other_agent in world_state.agents.items():
+                if other_agent.role.value == "Prisoner" and other_id != agent_id:
+                    distance = abs(agent.position[0] - other_agent.position[0]) + abs(agent.position[1] - other_agent.position[1])
+                    if distance <= 3 and random.random() < 0.3:  # 30%概率被发现
+                        other_agent.memory["episodic"].append(f"发现{agent.name}在挖掘地道")
+                        discovered_by.append(other_agent.name)
+        else:
+            message = f"在{location}挖掘地道失败"
+            event_type = "tunnel_failure"
+            discovered_by = []
+        
+        # 添加记忆
+        agent.memory["episodic"].append(message)
+        
+        # 记录事件
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type=event_type,
+            description=message,
+            details=json.dumps({
+                "location": location,
+                "success_rate": success_rate,
+                "successful": is_successful,
+                "discovered_by": discovered_by,
+                "action_points_remaining": agent.action_points
+            })
+        )
+        
+        if is_successful:
+            world_state.event_log.append(f"🕳️ {agent.name}在{location}成功挖掘地道")
+        else:
+            world_state.event_log.append(f"❌ {agent.name}在{location}挖掘地道失败")
+        
+        return ActionResult(success=True, message=message, world_state_changed=True)
+
+
 # Action registry
 ACTION_REGISTRY = {
+    # Basic Actions
     ActionEnum.DO_NOTHING: DoNothingAction,
     ActionEnum.MOVE: MoveAction,
     ActionEnum.SPEAK: SpeakAction,
     ActionEnum.ATTACK: AttackAction,
     ActionEnum.USE_ITEM: UseItemAction,
+    ActionEnum.GIVE_ITEM: GiveItemAction,
+    
+    # Guard-specific Actions (5 new behaviors)
+    ActionEnum.ANNOUNCE_RULE: AnnounceRuleAction,
+    ActionEnum.PATROL_INSPECT: PatrolInspectAction,
+    ActionEnum.ENFORCE_PUNISHMENT: EnforcePunishmentAction,
+    ActionEnum.ASSIGN_TASK: AssignTaskAction,
+    ActionEnum.EMERGENCY_ASSEMBLY: EmergencyAssemblyAction,
+    
+    # Prisoner-specific Actions (5 new behaviors)
+    ActionEnum.STEAL_ITEM: StealItemAction,
+    ActionEnum.FORM_ALLIANCE: FormAllianceAction,
+    ActionEnum.CRAFT_WEAPON: CraftWeaponAction,
+    ActionEnum.SPREAD_RUMOR: SpreadRumorAction,
+    ActionEnum.DIG_TUNNEL: DigTunnelAction,
 }

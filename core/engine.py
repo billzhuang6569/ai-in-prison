@@ -28,10 +28,15 @@ class GameEngine:
         """Set callback function for broadcasting state updates"""
         self.broadcast_callback = callback
     
-    async def start_simulation(self):
-        """Start the simulation loop"""
+    def set_model(self, model_name: str):
+        """Set the LLM model for the experiment"""
+        self.llm_service.default_model = model_name
+        print(f"LLM model set to: {model_name}")
+    
+    async def start_simulation(self, guard_count=None, prisoner_count=None):
+        """Start the simulation loop with optional agent counts"""
         if not self.world.state:
-            self.world.initialize_world()
+            self.world.initialize_world(guard_count, prisoner_count)
         
         # Start new session for this experiment
         session_id = session_manager.start_new_session()
@@ -119,12 +124,17 @@ class GameEngine:
                             self.world.state.event_log.append(f"[Enhanced LLM] {agent.name} performed {action_type.value}")
                         return result
                     else:
-                        self.world.state.event_log.append(f"[LLM] {agent.name}'s action {action_type.value} failed validation")
+                        self.world.state.event_log.append(f"[LLM] {agent.name}'s action {action_type.value} failed validation, params: {kwargs}")
+                else:
+                    self.world.state.event_log.append(f"[LLM] {agent.name} received empty LLM decision")
             except Exception as e:
                 print(f"LLM decision error for {agent_id}: {e}")
-                self.world.state.event_log.append(f"[LLM] {agent.name} LLM error, falling back to random")
+                self.world.state.event_log.append(f"[LLM] {agent.name} LLM error: {str(e)[:100]}, falling back to random")
+        else:
+            self.world.state.event_log.append(f"[LLM] Service not available for {agent.name}, using random action")
         
         # Fallback to random action selection
+        self.world.state.event_log.append(f"[Random] {agent.name} using random action (LLM failed)")
         available_actions = self._get_available_actions(agent)
         
         if not available_actions:

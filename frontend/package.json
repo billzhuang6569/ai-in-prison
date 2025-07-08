@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@iconify/react": "^6.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "zustand": "^4.4.7",
-    "recharts": "^2.8.0"
+    "recharts": "^2.8.0",
+    "zustand": "^4.4.7"
   },
   "scripts": {
     "start": "PORT=24682 react-scripts start",
@@ -33,5 +34,8 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:24861"
+  "proxy": "http://localhost:24861",
+  "devDependencies": {
+    "@iconify-json/game-icons": "^1.2.3"
+  }
 }
