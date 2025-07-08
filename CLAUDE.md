@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Project Prometheus (普罗米修斯计划)** - an AI social behavior simulation platform designed to model AI agents in controlled social environments. The first experiment scenario simulates the Stanford Prison Experiment to observe emergent AI behaviors, power dynamics, and social relationships.
 
-**Current Status**: FULLY IMPLEMENTED. Complete AI simulation platform with real-time visualization, session management, and LLM integration. Production ready.
+**Current Status**: FULLY IMPLEMENTED AND OPTIMIZED. Complete AI simulation platform with advanced UI, real-time trajectory tracking, multi-model LLM integration, and production-ready features.
 
 ## Architecture Design
 
@@ -30,10 +30,13 @@ The system is designed with a **frontend-backend separation** architecture:
 ### Frontend (React)
 - **Framework**: React with component-based architecture
 - **State Management**: Zustand store with WebSocket integration
-- **Layout**: Three-column interface (IMPLEMENTED)
-  - Left: Global monitoring, controls, and timeline event display
-  - Center: 9x16 prison map visualization with real-time agent positions
-  - Right: Individual agent details and intervention tools
+- **Advanced UI Layout**: Grid-based responsive interface (OPTIMIZED)
+  - **Left Top**: Experiment controls with Agent configuration modal
+  - **Left Bottom**: Event timeline table with data export functionality
+  - **Left Sidebar**: Agent preview with recent actions
+  - **Center**: Enhanced map with SVG trajectory tracking and real-time synchronization
+  - **Right Top**: Interactive agent cards with multiple view modes
+  - **Right Bottom**: Detailed agent inspection (thinking, prompts, memory, stats)
 
 ### Communication
 - **WebSocket**: Real-time world state broadcasting from backend to frontend
@@ -54,9 +57,11 @@ The system is designed with a **frontend-backend separation** architecture:
 - **Relationships**: N×N matrix tracking inter-agent social dynamics
 
 ### LLM Integration
-- **OpenRouter**: Multi-model LLM access via API
+- **OpenRouter**: Multi-model LLM access via API with model selection
+- **Model Support**: Claude 3 (Haiku/Sonnet/Opus), GPT-4o, Llama 3.1, Gemini Pro
 - **Tool Calling**: Structured JSON responses for AI actions
-- **Prompt Engineering**: Comprehensive context including personality, status, relationships, and objectives
+- **Prompt Engineering**: Revolutionary Guard directive system with hierarchical authority
+- **Advanced Prompting**: SESSION-based context with real-time threat detection
 
 ## Development Commands
 
@@ -86,9 +91,11 @@ The system is designed with a **frontend-backend separation** architecture:
 - **Session Management**: Unique session IDs for experiment isolation and data integrity
 
 ### Map & Environment
-- **Grid Size**: 9×16 cells
+- **Grid Size**: 9×16 cells with CSS Grid layout
 - **Cell Types**: Cell_Block, Cafeteria, Yard, Solitary, Guard_Room
 - **Time System**: Day/Hour progression with status degradation
+- **Trajectory Tracking**: SVG-based movement visualization with direction arrows
+- **Real-time Sync**: Agent positions and trajectory endpoints perfectly synchronized
 
 ### AI Behavior Framework
 - **Roles**: Guard, Prisoner with different capabilities and objectives
@@ -112,10 +119,55 @@ The system is designed with a **frontend-backend separation** architecture:
 3. **LLM Integration**: Advanced OpenRouter service + comprehensive prompt engineering + action parsing
 4. **Full Features**: Complete UI + session management + intervention system + SQLite persistence
 5. **Session Management**: Unique experiment sessions with data isolation
+6. **UI/UX Optimization**: Grid-based layout + trajectory tracking + model selection
+7. **Advanced Features**: Agent configuration modal + data export + real-time synchronization
+8. **Bug Fixes**: Attack distance calculation + conversation transmission + ResizeObserver errors
+
+## Latest Enhancements (v2.0)
+
+### 🎯 **Advanced Experiment Controls**
+- **Agent Configuration Modal**: Custom Guard/Prisoner counts (1-10 Guards, 1-20 Prisoners)
+- **Model Selection**: Support for 7 different LLM models with cost indicators
+- **Session Management**: Create new experiments vs continue existing sessions
+- **Environment Injection**: Real-time context injection during experiments
+
+### 🗺️ **Enhanced Map Visualization**
+- **SVG Trajectory Lines**: Connected movement paths with direction arrows
+- **Real-time Synchronization**: Trajectory endpoints perfectly aligned with agent positions
+- **Interactive Elements**: Click agents to select across all panels
+- **Visual Indicators**: Start/end markers, trajectory toggle, improved agent labels (G1, P1, P2...)
+
+### 🎴 **Comprehensive Agent Management**
+- **Agent Cards**: Overview, personality, relationships, inventory view modes
+- **Agent Details**: Thinking process, complete prompts, memory system, detailed stats
+- **Agent Preview**: Recent actions, health status, real-time updates
+- **Cross-panel Selection**: Synchronized selection across map, cards, and details
+
+### 📊 **Data Analysis & Export**
+- **Timeline Events**: Comprehensive event table with agent-specific filtering
+- **Export Capabilities**: CSV, JSON, and session summary downloads
+- **Session Analytics**: Event statistics, interaction tracking, behavior analysis
+- **Time-based Filtering**: Day/hour/minute level event organization
 
 ## Current Running Servers
 - **Backend**: http://localhost:24861 (FastAPI + WebSocket)
 - **Frontend**: http://localhost:24682 (React development server)
-- **Status**: Production ready for Stanford Prison Experiment simulations
+- **Status**: Production ready with advanced features for comprehensive AI behavioral research
+
+## Key Components Created
+
+### Frontend Components
+- `ExperimentControl.js` - Advanced experiment controls with model selection and agent configuration
+- `EventTable.js` - Timeline event visualization with data export capabilities
+- `AgentPreview.js` - Real-time agent overview with recent actions
+- `AgentCards.js` - Interactive agent cards with multiple view modes
+- `AgentDetails.js` - Comprehensive agent inspection (thinking, prompts, memory, stats)
+- `MapView.js` - Enhanced map with SVG trajectory tracking and real-time synchronization
+
+### Backend Enhancements
+- Guard prompt optimization with hierarchical directive system
+- Attack distance calculation fixes (Manhattan vs Chebyshev)
+- Session management and data export endpoints
+- Model selection parameter support
 
 For detailed development progress, see CLAUDE_PLAN.md

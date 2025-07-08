@@ -1,12 +1,14 @@
 /**
- * Main App component for Project Prometheus
+ * Main App component for Project Prometheus - Redesigned Layout
  */
 import React, { useEffect } from 'react';
 import useWorldStore from './store/worldStore';
-import ControlPanel from './components/ControlPanel';
+import ExperimentControl from './components/ExperimentControl';
+import EventTable from './components/EventTable';
+import AgentPreview from './components/AgentPreview';
 import MapView from './components/MapView';
-import DetailPanel from './components/DetailPanel';
-import PromptPanel from './components/PromptPanel';
+import AgentCards from './components/AgentCards';
+import AgentDetails from './components/AgentDetails';
 import Header from './components/Header';
 import './App.css';
 
@@ -14,12 +16,22 @@ function App() {
   const { connect, disconnect, isConnected, worldState } = useWorldStore();
   
   useEffect(() => {
+    // Suppress ResizeObserver errors
+    const originalError = console.error;
+    console.error = (...args) => {
+      if (args[0]?.includes?.('ResizeObserver loop completed')) {
+        return;
+      }
+      originalError(...args);
+    };
+    
     // Connect to WebSocket on mount
     connect();
     
     // Cleanup on unmount
     return () => {
       disconnect();
+      console.error = originalError;
     };
   }, [connect, disconnect]);
   
@@ -28,20 +40,33 @@ function App() {
       <Header />
       
       <div className="main-content">
-        <div className="left-panel">
-          <ControlPanel />
+        {/* Left Column */}
+        <div className="left-column">
+          <div className="left-top">
+            <ExperimentControl />
+          </div>
+          <div className="left-bottom">
+            <EventTable />
+          </div>
         </div>
         
+        {/* Left Sidebar */}
+        <div className="left-sidebar">
+          <AgentPreview />
+        </div>
+        
+        {/* Center Panel */}
         <div className="center-panel">
           <MapView />
         </div>
         
+        {/* Right Panel */}
         <div className="right-panel">
-          <div className="detail-section">
-            <DetailPanel />
+          <div className="right-top">
+            <AgentCards />
           </div>
-          <div className="prompt-section">
-            <PromptPanel />
+          <div className="right-bottom">
+            <AgentDetails />
           </div>
         </div>
       </div>
