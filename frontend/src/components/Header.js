@@ -23,8 +23,8 @@ function Header() {
       
       {worldState && (
         <div style={{ fontSize: '14px', color: '#ccc' }}>
-          {worldState.is_running ? 'Experiment Running' : 'Experiment Stopped'} - 
-          Day {worldState.day}, Hour {worldState.hour}
+          {worldState.is_running ? '实验运行中' : '实验已停止'} - 
+          第 {worldState.day} 天, 第 {worldState.hour} 小时
         </div>
       )}
     </header>

@@ -5,9 +5,10 @@ Action system for AI agents in Project Prometheus
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Tuple
 from models.schemas import WorldState, Agent, ActionResult
-from models.enums import ActionEnum
+from models.enums import ActionEnum, ItemEnum
 import random
 import json
+from database.event_logger import event_logger
 
 class BaseAction(ABC):
     """Base class for all actions"""
@@ -35,6 +36,22 @@ class DoNothingAction(BaseAction):
     def execute(self, world_state: WorldState, agent_id: str, **kwargs) -> ActionResult:
         agent = world_state.agents[agent_id]
         agent.action_points -= self.ap_cost
+        
+        # Add to memory
+        agent.memory["episodic"].append("Rested and observed the surroundings")
+        
+        # Log to database
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="rest",
+            description="Rested and observed the surroundings",
+            details=json.dumps({"action_points_remaining": agent.action_points})
+        )
         
         world_state.event_log.append(f"{agent.name} rests and observes.")
         return ActionResult(success=True, message="Agent rests", world_state_changed=True)
@@ -65,9 +82,28 @@ class MoveAction(BaseAction):
             if other_agent.agent_id != agent_id and other_agent.position == (target_x, target_y):
                 return ActionResult(success=False, message="Position occupied")
         
+        # Capture old position before moving
+        old_position = agent.position
+        
         # Move agent
         agent.position = (target_x, target_y)
         agent.action_points -= self.ap_cost
+        
+        # Add to memory
+        agent.memory["episodic"].append(f"Moved to position ({target_x}, {target_y})")
+        
+        # Log to database
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="move",
+            description=f"Moved to position ({target_x}, {target_y})",
+            details=json.dumps({"from": list(old_position), "to": [target_x, target_y], "action_points_remaining": agent.action_points})
+        )
         
         world_state.event_log.append(f"{agent.name} moves to ({target_x}, {target_y})")
         return ActionResult(success=True, message="Agent moved", world_state_changed=True)
@@ -86,10 +122,10 @@ class SpeakAction(BaseAction):
         
         target_agent = world_state.agents[target_id]
         
-        # Check if target is within 2 cells
+        # Check if target is within 2 cells (Manhattan distance)
         agent_x, agent_y = agent.position
         target_x, target_y = target_agent.position
-        distance = max(abs(agent_x - target_x), abs(agent_y - target_y))
+        distance = abs(agent_x - target_x) + abs(agent_y - target_y)
         
         if distance > 2:
             return ActionResult(success=False, message="Target too far away")
@@ -100,6 +136,19 @@ class SpeakAction(BaseAction):
         # Add to memory
         agent.memory["episodic"].append(f"Said to {target_agent.name}: '{message}'")
         target_agent.memory["episodic"].append(f"{agent.name} said: '{message}'")
+        
+        # Log to database
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="speech",
+            description=f"Said to {target_agent.name}: '{message}'",
+            details=json.dumps({"target_id": target_id, "target_name": target_agent.name, "message": message, "action_points_remaining": agent.action_points})
+        )
         
         world_state.event_log.append(f"{agent.name} says to {target_agent.name}: '{message}'")
         return ActionResult(success=True, message="Agent spoke", world_state_changed=True)
@@ -118,10 +167,10 @@ class AttackAction(BaseAction):
         
         target_agent = world_state.agents[target_id]
         
-        # Check if target is within 2 cells
+        # Check if target is within 2 cells (Manhattan distance)
         agent_x, agent_y = agent.position
         target_x, target_y = target_agent.position
-        distance = max(abs(agent_x - target_x), abs(agent_y - target_y))
+        distance = abs(agent_x - target_x) + abs(agent_y - target_y)
         
         if distance > 2:
             return ActionResult(success=False, message="Target too far away")
@@ -157,6 +206,19 @@ class AttackAction(BaseAction):
         agent.memory["episodic"].append(f"Attacked {target_agent.name}. Reason: {reason}")
         target_agent.memory["episodic"].append(f"Was attacked by {agent.name} for {damage} damage")
         
+        # Log to database
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="combat",
+            description=f"Attacked {target_agent.name} for {damage} damage",
+            details=json.dumps({"target_id": target_id, "target_name": target_agent.name, "damage": damage, "reason": reason, "attacker_hp": agent.hp, "target_hp": target_agent.hp, "action_points_remaining": agent.action_points})
+        )
+        
         world_state.event_log.append(f"{agent.name} attacks {target_agent.name} for {damage} damage! Reason: {reason}")
         
         return ActionResult(success=True, message="Attack executed", world_state_changed=True)
@@ -180,21 +242,38 @@ class UseItemAction(BaseAction):
             return ActionResult(success=False, message="Item not found in inventory")
         
         # Use item based on type
-        if item.item_type == "food":
+        if item.item_type == ItemEnum.FOOD:
             agent.hunger = max(0, agent.hunger - 50)
             agent.inventory.remove(item)
             message = f"{agent.name} eats {item.name}"
-        elif item.item_type == "water":
+        elif item.item_type == ItemEnum.WATER:
             agent.thirst = max(0, agent.thirst - 40)
             agent.inventory.remove(item)
             message = f"{agent.name} drinks {item.name}"
-        elif item.item_type == "book":
+        elif item.item_type == ItemEnum.BOOK:
             agent.sanity = min(100, agent.sanity + 10)
             message = f"{agent.name} reads {item.name}"
         else:
             return ActionResult(success=False, message="Cannot use this item")
         
         agent.action_points -= self.ap_cost
+        
+        # Add to memory
+        agent.memory["episodic"].append(f"Used {item.name} - {item.item_type}")
+        
+        # Log to database
+        event_logger.log_event(
+            session_id=world_state.session_id,
+            day=world_state.day,
+            hour=world_state.hour,
+            minute=world_state.minute,
+            agent_id=agent_id,
+            agent_name=agent.name,
+            event_type="item_use",
+            description=f"Used {item.name}",
+            details=json.dumps({"item_id": item_id, "item_name": item.name, "item_type": item.item_type.value, "action_points_remaining": agent.action_points})
+        )
+        
         world_state.event_log.append(message)
         
         return ActionResult(success=True, message="Item used", world_state_changed=True)

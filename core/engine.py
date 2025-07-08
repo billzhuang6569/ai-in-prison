@@ -10,7 +10,8 @@ from models.actions import ACTION_REGISTRY
 from models.enums import ActionEnum
 from core.world import World
 from core.clock import TimeController
-from services.llm_service import LLMService
+from core.session_manager import session_manager
+from services.llm_service_enhanced import EnhancedLLMService
 
 class GameEngine:
     """Main game loop engine"""
@@ -18,7 +19,7 @@ class GameEngine:
     def __init__(self):
         self.world = World()
         self.clock = TimeController()
-        self.llm_service = LLMService()
+        self.llm_service = EnhancedLLMService()
         self.is_running = False
         self.turn_delay = 2.0  # seconds between turns
         self.broadcast_callback = None
@@ -31,6 +32,10 @@ class GameEngine:
         """Start the simulation loop"""
         if not self.world.state:
             self.world.initialize_world()
+        
+        # Start new session for this experiment
+        session_id = session_manager.start_new_session()
+        self.world.state.session_id = session_id
         
         self.is_running = True
         self.world.state.is_running = True
@@ -46,6 +51,9 @@ class GameEngine:
         self.is_running = False
         if self.world.state:
             self.world.state.is_running = False
+        
+        # End the current session
+        session_manager.end_session()
     
     async def _execute_turn(self):
         """Execute one complete turn"""
@@ -60,6 +68,12 @@ class GameEngine:
         # Sort to ensure consistent order: guards first, then prisoners
         agent_ids.sort(key=lambda x: (0 if x.startswith('guard') else 1, x))
         
+        # Check if all agents are dead/incapacitated
+        alive_agents = [agent for agent in self.world.state.agents.values() if agent.hp > 0]
+        if not alive_agents:
+            self.world.state.event_log.append("⚠️ ALL AGENTS INCAPACITATED - Simulation continuing with empty turns")
+        
+        active_agents_this_turn = 0
         for agent_id in agent_ids:
             agent = self.world.state.agents[agent_id]
             
@@ -67,11 +81,17 @@ class GameEngine:
             if agent.hp <= 0:
                 continue
             
+            active_agents_this_turn += 1
+            
             # Agent takes actions until AP is exhausted
             while agent.action_points > 0:
                 action_result = await self._execute_agent_action(agent_id)
                 if not action_result.success:
                     break  # If action fails, skip remaining actions
+        
+        # Log if no agents took actions this turn
+        if active_agents_this_turn == 0:
+            self.world.state.event_log.append(f"⚠️ No active agents on Day {self.world.state.day}, Hour {self.world.state.hour}")
         
         # Phase 3: Broadcast updated state
         await self._broadcast_state()
@@ -96,7 +116,7 @@ class GameEngine:
                     if action.can_execute(self.world.state, agent_id, **kwargs):
                         result = action.execute(self.world.state, agent_id, **kwargs)
                         if result.success:
-                            self.world.state.event_log.append(f"[LLM] {agent.name} performed {action_type.value}")
+                            self.world.state.event_log.append(f"[Enhanced LLM] {agent.name} performed {action_type.value}")
                         return result
                     else:
                         self.world.state.event_log.append(f"[LLM] {agent.name}'s action {action_type.value} failed validation")

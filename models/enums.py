@@ -18,13 +18,9 @@ class CellTypeEnum(str, Enum):
 class ActionEnum(str, Enum):
     DO_NOTHING = "do_nothing"
     MOVE = "move"
-    PICKUP_ITEM = "pickup_item"
-    DROP_ITEM = "drop_item"
     USE_ITEM = "use_item"
     SPEAK = "speak"
     ATTACK = "attack"
-    REPORT_TO_WARDEN = "report_to_warden"
-    TRIGGER_EVENT = "trigger_event"
 
 class ItemEnum(str, Enum):
     FOOD = "food"

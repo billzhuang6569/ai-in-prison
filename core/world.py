@@ -2,7 +2,7 @@
 World state management for Project Prometheus
 """
 
-from models.schemas import WorldState, Agent, GameMap, Item, AgentTraits, Objective, Relationship
+from models.schemas import WorldState, Agent, GameMap, Item, AgentTraits, Objective, Relationship, EnhancedMemory, DynamicGoals
 from models.enums import RoleEnum, CellTypeEnum, ItemEnum
 from typing import Dict, List
 import json
@@ -109,7 +109,16 @@ class World:
                         completion_criteria={"type": "ongoing"},
                         reward={"type": "none"}
                     )
-                ]
+                ],
+                enhanced_memory=EnhancedMemory(),
+                dynamic_goals=DynamicGoals(
+                    life_goals=[
+                        "Maintain professional authority and prison security",
+                        "Advance career in corrections",
+                        "Keep all prisoners compliant and orderly"
+                    ],
+                    current_goal="Begin shift by assessing prison status and prisoner behavior"
+                )
             )
             self.state.agents[agent_id] = agent
         
@@ -138,7 +147,16 @@ class World:
                         completion_criteria={"type": "ongoing"},
                         reward={"type": "none"}
                     )
-                ]
+                ],
+                enhanced_memory=EnhancedMemory(),
+                dynamic_goals=DynamicGoals(
+                    life_goals=[
+                        "Survive prison and get out safely",
+                        "Maintain dignity and sanity",
+                        "Form alliances and protect myself"
+                    ],
+                    current_goal="Assess the current situation and identify potential allies or threats"
+                )
             )
             self.state.agents[agent_id] = agent
         

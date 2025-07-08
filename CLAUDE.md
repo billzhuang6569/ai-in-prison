@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Project Prometheus (普罗米修斯计划)** - an AI social behavior simulation platform designed to model AI agents in controlled social environments. The first experiment scenario simulates the Stanford Prison Experiment to observe emergent AI behaviors, power dynamics, and social relationships.
 
-**Current Status**: Documentation-only phase. No implementation code exists yet.
+**Current Status**: FULLY IMPLEMENTED. Complete AI simulation platform with real-time visualization, session management, and LLM integration. Production ready.
 
 ## Architecture Design
 
@@ -18,17 +18,21 @@ The system is designed with a **frontend-backend separation** architecture:
 - **Key Components**:
   - `core/engine.py`: Main game loop driving simulation turns
   - `core/world.py`: World state management (singleton pattern)
-  - `models/agent.py`: AI agent entities with personality, status, relationships
-  - `services/llm_service.py`: OpenRouter integration for LLM decision-making
+  - `core/session_manager.py`: Experiment session lifecycle management
+  - `models/schemas.py`: Pydantic data models (Agent, WorldState, etc.)
+  - `models/actions.py`: Complete action system with session logging
+  - `services/llm_service_enhanced.py`: Advanced OpenRouter integration with tool calling
   - `api/websockets.py`: Real-time communication with frontend
+  - `api/rest.py`: REST API endpoints with session support
+  - `database/event_logger.py`: SQLite event logging with session isolation
   - `configs/game_rules.json`: Configurable game mechanics and rules
 
 ### Frontend (React)
 - **Framework**: React with component-based architecture
-- **State Management**: Zustand or Redux Toolkit recommended
-- **Layout**: Three-column interface
-  - Left: Global monitoring and controls
-  - Center: 9x16 prison map visualization
+- **State Management**: Zustand store with WebSocket integration
+- **Layout**: Three-column interface (IMPLEMENTED)
+  - Left: Global monitoring, controls, and timeline event display
+  - Center: 9x16 prison map visualization with real-time agent positions
   - Right: Individual agent details and intervention tools
 
 ### Communication
@@ -56,11 +60,20 @@ The system is designed with a **frontend-backend separation** architecture:
 
 ## Development Commands
 
-**Note**: No build system is currently implemented. When code is added, typical Python commands would be:
+**Current Status**: Full implementation with working build system.
+
+### Backend
+- `source venv/bin/activate` - Activate Python virtual environment
 - `pip install -r requirements.txt` - Install dependencies
-- `python main.py` - Start FastAPI server
-- `pytest` - Run tests (when implemented)
-- `ruff check` - Lint code (when implemented)
+- `python main.py` - Start FastAPI server on http://localhost:24861
+
+### Frontend
+- `npm install` - Install Node.js dependencies
+- `npm start` - Start React development server on http://localhost:24682
+
+### Full System
+- Backend and frontend run concurrently for complete functionality
+- WebSocket connection provides real-time state synchronization
 
 ## Technical Specifications
 
@@ -68,8 +81,9 @@ The system is designed with a **frontend-backend separation** architecture:
 - **Status System**: HP, Sanity, Hunger, Thirst, Strength (0-100 scales)
 - **Action Points**: 3 per turn, consumed by different actions
 - **Relationship Matrix**: 0-100 scores with contextual descriptions
-- **Event System**: Automatic and choice-driven events affecting world state
+- **Event System**: Complete logging with SQLite persistence and session isolation
 - **Objective System**: Role-based, individual, secret, and emergent goals
+- **Session Management**: Unique session IDs for experiment isolation and data integrity
 
 ### Map & Environment
 - **Grid Size**: 9×16 cells
@@ -80,7 +94,7 @@ The system is designed with a **frontend-backend separation** architecture:
 - **Roles**: Guard, Prisoner with different capabilities and objectives
 - **Personality Traits**: Aggression, Empathy, Logic, Obedience, Resilience (0-100)
 - **Memory System**: Core and episodic memory affecting decision-making
-- **Action Set**: do_nothing, move, pickup_item, use_item, speak, attack, report_to_warden
+- **Action Set**: do_nothing, move, use_item, speak, attack (fully implemented with session logging)
 
 ## Security Considerations
 
@@ -90,10 +104,18 @@ The system is designed with a **frontend-backend separation** architecture:
 - Monitor AI behaviors for concerning patterns
 - Maintain clear boundaries between simulation and reality
 
-## Future Implementation Notes
+## Implementation Status
 
-When beginning implementation, follow this development roadmap:
-1. **Backend Core**: FastAPI setup + basic data models + game loop without LLM
-2. **Frontend Basic**: React setup + WebSocket client + basic map visualization  
-3. **LLM Integration**: OpenRouter service + prompt engineering + action parsing
-4. **Full Features**: Complete UI + analytics + intervention system + persistence
+✅ **COMPLETED**: All development phases finished successfully:
+1. **Backend Core**: FastAPI setup + complete data models + full game loop with LLM
+2. **Frontend Complete**: React setup + WebSocket client + full map visualization + timeline interface
+3. **LLM Integration**: Advanced OpenRouter service + comprehensive prompt engineering + action parsing
+4. **Full Features**: Complete UI + session management + intervention system + SQLite persistence
+5. **Session Management**: Unique experiment sessions with data isolation
+
+## Current Running Servers
+- **Backend**: http://localhost:24861 (FastAPI + WebSocket)
+- **Frontend**: http://localhost:24682 (React development server)
+- **Status**: Production ready for Stanford Prison Experiment simulations
+
+For detailed development progress, see CLAUDE_PLAN.md

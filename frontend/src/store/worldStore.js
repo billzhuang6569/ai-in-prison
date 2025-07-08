@@ -38,22 +38,42 @@ const useWorldStore = create((set, get) => ({
         
         switch (message.type) {
           case 'world_update':
-            set({ worldState: message.payload });
+            // Safely update world state with validation
+            try {
+              const newWorldState = message.payload;
+              
+              // Ensure agent_prompts exists
+              if (!newWorldState.agent_prompts) {
+                newWorldState.agent_prompts = {};
+              }
+              
+              set({ worldState: newWorldState });
+            } catch (updateError) {
+              console.error('Error updating world state:', updateError);
+              // Don't crash, just log the error
+            }
             break;
           case 'experiment_started':
             console.log('Experiment started');
+            set(state => ({ 
+              worldState: state.worldState ? { ...state.worldState, is_running: true } : null
+            }));
             break;
           case 'experiment_stopped':
             console.log('Experiment stopped');
+            set(state => ({ 
+              worldState: state.worldState ? { ...state.worldState, is_running: false } : null
+            }));
             break;
           case 'error':
-            console.error('Server error:', message.payload.message);
+            console.error('Server error:', message.payload?.message || 'Unknown error');
             break;
           default:
             console.log('Unknown message type:', message.type);
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
+        console.error('Raw message:', event.data);
       }
     };
     

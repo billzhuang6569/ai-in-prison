@@ -27,10 +27,23 @@ class Objective(BaseModel):
     objective_id: str
     name: str
     description: str
-    type: str  # "Role", "Individual", "Secret", "Emergent"
+    type: str  # "Role", "Individual", "Secret", "Emergent", "Manual", "Dynamic"
     completion_criteria: Dict
     reward: Dict
     is_completed: bool = False
+    priority: int = Field(default=1, ge=1, le=10)  # 1=low, 10=critical
+
+class EnhancedMemory(BaseModel):
+    """Enhanced memory system with short-term and summarized medium-term"""
+    short_term: List[str] = []  # Last 5 raw memories
+    medium_term_summary: str = ""  # LLM-summarized older memories
+    thinking_history: List[str] = []  # Previous thinking processes
+    
+class DynamicGoals(BaseModel):
+    """Dynamic goal system"""
+    life_goals: List[str] = []  # Long-term aspirations
+    current_goal: str = ""  # AI-generated current focus
+    manual_intervention_goals: List[Objective] = []  # User-injected goals
 
 class Agent(BaseModel):
     agent_id: str
@@ -53,9 +66,12 @@ class Agent(BaseModel):
     status_tags: List[str] = []
     
     # Mind
-    objectives: List[Objective] = []
+    objectives: List[Objective] = []  # Keep for backwards compatibility
+    dynamic_goals: DynamicGoals = DynamicGoals()
     relationships: Dict[str, Relationship] = {}
-    memory: Dict[str, List[str]] = {"core": [], "episodic": []}
+    memory: Dict[str, List[str]] = {"core": [], "episodic": []}  # Keep for backwards compatibility
+    enhanced_memory: EnhancedMemory = EnhancedMemory()
+    last_thinking: str = ""  # Most recent thinking process
 
 class GameMap(BaseModel):
     width: int
@@ -63,16 +79,29 @@ class GameMap(BaseModel):
     cells: Dict[str, CellTypeEnum]  # key: "x,y" -> cell type
     items: Dict[str, List[Item]] = {}  # key: "x,y" -> list of items
 
+class PromptData(BaseModel):
+    """Store agent's prompt and decision data"""
+    agent_id: str
+    agent_name: str
+    prompt_content: str = ""
+    thinking_process: str = ""
+    decision: str = ""
+    timestamp: str = ""
+
 class WorldState(BaseModel):
     """
     Complete world state broadcasted to frontend via WebSocket
     """
+    session_id: str = ""  # Unique session identifier for each experiment
     day: int = 1
     hour: int = 8
+    minute: int = 0
     is_running: bool = False
     agents: Dict[str, Agent] = {}  # key: agent_id
     game_map: GameMap
     event_log: List[str] = []
+    agent_prompts: Dict[str, PromptData] = {}  # key: agent_id -> prompt data
+    environmental_injection: str = ""  # Admin injected environmental context
     
     class Config:
         arbitrary_types_allowed = True

@@ -6,6 +6,7 @@ import useWorldStore from './store/worldStore';
 import ControlPanel from './components/ControlPanel';
 import MapView from './components/MapView';
 import DetailPanel from './components/DetailPanel';
+import PromptPanel from './components/PromptPanel';
 import Header from './components/Header';
 import './App.css';
 
@@ -36,7 +37,12 @@ function App() {
         </div>
         
         <div className="right-panel">
-          <DetailPanel />
+          <div className="detail-section">
+            <DetailPanel />
+          </div>
+          <div className="prompt-section">
+            <PromptPanel />
+          </div>
         </div>
       </div>
       

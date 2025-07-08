@@ -165,8 +165,21 @@ Nearby agents (within 2 cells):
             prompt += f"- {objective.name}: {objective.description} ({status})\n"
         
         prompt += f"""
-# [Decision Making]
-You have {agent.action_points} action points remaining. Consider your personality traits, current status, relationships, and objectives when making decisions.
+# [Decision Making Context]
+This is a Stanford Prison Experiment simulation. You are experiencing psychological pressure and social dynamics.
+
+Current Motivations:
+- If you're a GUARD: Maintain order, assert authority, patrol areas, interact with prisoners
+- If you're a PRISONER: Survive, maintain sanity, form alliances, resist or comply with guards
+- If hungry/thirsty (>70): Actively seek food/water or ask others for help
+- If low sanity (<30): Take desperate actions or seek comfort
+- If low HP (<30): Avoid conflict or seek safety
+- If high aggression (>70): Consider confrontational actions
+- If others nearby: Consider social interaction (speak/attack based on relationships)
+
+You have {agent.action_points} action points. DO NOT just rest - take meaningful action based on your role, personality, and current needs.
+
+IMPORTANT: You are in a prison environment - act accordingly! Guards should patrol and manage prisoners. Prisoners should respond to their situation.
 
 What action do you want to take? Call the appropriate function with the necessary parameters.
 """
@@ -254,9 +267,6 @@ What action do you want to take? Call the appropriate function with the necessar
                 if not action_type:
                     print(f"Unknown function name: {function_name}")
                     return None
-                
-                # Add to agent's memory
-                agent.memory["episodic"].append(f"Decided to {function_name}: {function_args}")
                 
                 return {
                     "action_type": action_type,
