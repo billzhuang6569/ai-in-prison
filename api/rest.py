@@ -150,6 +150,93 @@ async def get_agent(agent_id: str):
     
     return world_state.agents[agent_id].dict()
 
+@router.get("/agents/{agent_id}/memory")
+async def get_agent_memory(agent_id: str):
+    """Get agent's complete memory history with timestamps"""
+    world_state = manager.game_engine.get_world_state()
+    
+    if not world_state:
+        raise HTTPException(status_code=404, detail="World not initialized")
+    
+    if agent_id not in world_state.agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    agent = world_state.agents[agent_id]
+    
+    # Get agent's memory from event logs for complete history with timestamps
+    session_id = world_state.session_id if hasattr(world_state, 'session_id') else None
+    events = event_logger.get_events(
+        limit=1000,  # Get plenty of history
+        agent_id=agent_id,
+        session_id=session_id
+    )
+    
+    # Format memory with timestamps
+    memory_entries = []
+    for event in reversed(events):  # Reverse to get newest first
+        if event.description:
+            memory_entries.append({
+                "timestamp": f"Day {event.day} Hour {event.hour}",
+                "content": event.description,
+                "event_type": event.event_type,
+                "day": event.day,
+                "hour": event.hour
+            })
+    
+    return {
+        "agent_id": agent_id,
+        "agent_name": agent.name,
+        "enhanced_memory": agent.enhanced_memory.dict() if agent.enhanced_memory else {},
+        "legacy_memory": agent.memory if hasattr(agent, 'memory') else {},
+        "timestamped_history": memory_entries,
+        "last_thinking": getattr(agent, 'last_thinking', ''),
+        "thinking_history": agent.enhanced_memory.thinking_history if agent.enhanced_memory else []
+    }
+
+@router.get("/agents/{agent_id}/refresh")
+async def refresh_agent_details(agent_id: str):
+    """Refresh and get complete agent details including latest memory and status"""
+    world_state = manager.game_engine.get_world_state()
+    
+    if not world_state:
+        raise HTTPException(status_code=404, detail="World not initialized")
+    
+    if agent_id not in world_state.agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    agent = world_state.agents[agent_id]
+    
+    # Get latest events for this agent
+    session_id = world_state.session_id if hasattr(world_state, 'session_id') else None
+    recent_events = event_logger.get_events(
+        limit=20,
+        agent_id=agent_id,
+        session_id=session_id
+    )
+    
+    # Get latest prompt data if available
+    prompt_data = None
+    if hasattr(world_state, 'agent_prompts') and agent_id in world_state.agent_prompts:
+        prompt_data = world_state.agent_prompts[agent_id].dict()
+    
+    return {
+        "agent": agent.dict(),
+        "recent_events": [
+            {
+                "timestamp": f"Day {event.day} Hour {event.hour}",
+                "description": event.description,
+                "event_type": event.event_type,
+                "day": event.day,
+                "hour": event.hour
+            } for event in reversed(recent_events)
+        ],
+        "prompt_data": prompt_data,
+        "world_time": {
+            "day": world_state.day,
+            "hour": world_state.hour
+        }
+    }
+
 @router.post("/agents/{agent_id}/inject_goal")
 async def inject_goal_to_agent(agent_id: str, goal_request: GoalInjectionRequest):
     """Inject a manual goal to a specific agent"""
@@ -338,7 +425,10 @@ async def get_events(limit: int = 100, offset: int = 0,
                 "event_type": e.event_type,
                 "description": e.description,
                 "details": e.details,
-                "timestamp": e.timestamp
+                "timestamp": e.timestamp,
+                "ai_prompt_content": e.ai_prompt_content,
+                "ai_thinking_process": e.ai_thinking_process,
+                "ai_decision": e.ai_decision
             }
             for e in events
         ],
@@ -364,7 +454,7 @@ async def export_events_csv(session_id: Optional[str] = None,
                            agent_id: Optional[str] = None,
                            event_type: Optional[str] = None,
                            day: Optional[int] = None):
-    """Export events to CSV format"""
+    """Export events to CSV format with enhanced AI decision data"""
     # Get all events with filtering
     events = event_logger.get_events(
         limit=10000,  # Large limit for export
@@ -379,22 +469,29 @@ async def export_events_csv(session_id: Optional[str] = None,
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write header
+    # Write enhanced header with AI decision data columns
     writer.writerow([
         "ID", "Session ID", "Day", "Hour", "Minute", "Agent ID", 
-        "Agent Name", "Event Type", "Description", "Details", "Timestamp"
+        "Agent Name", "Event Type", "Description", "Details", "Timestamp",
+        "AI_Prompt_Content", "AI_Thinking_Process", "AI_Decision"
     ])
     
-    # Write data rows
+    # Write data rows with enhanced AI decision data
     for event in events:
+        # Use AI decision data directly from the database
+        ai_prompt = event.ai_prompt_content or ""
+        ai_thinking = event.ai_thinking_process or ""
+        ai_decision = event.ai_decision or ""
+        
         writer.writerow([
             event.id, event.session_id, event.day, event.hour, event.minute,
             event.agent_id, event.agent_name, event.event_type, 
-            event.description, event.details, event.timestamp
+            event.description, event.details, event.timestamp,
+            ai_prompt, ai_thinking, ai_decision
         ])
     
     # Create response
-    filename = f"prometheus_events_{session_id or 'all'}.csv"
+    filename = f"prometheus_events_enhanced_{session_id or 'all'}.csv"
     response = StreamingResponse(
         io.BytesIO(output.getvalue().encode('utf-8')),
         media_type='text/csv',
@@ -443,19 +540,75 @@ async def export_events_json(session_id: Optional[str] = None,
                 "event_type": e.event_type,
                 "description": e.description,
                 "details": e.details,
-                "timestamp": e.timestamp
+                "timestamp": e.timestamp,
+                "ai_prompt_content": e.ai_prompt_content,
+                "ai_thinking_process": e.ai_thinking_process,
+                "ai_decision": e.ai_decision
             }
             for e in events
         ]
     }
     
     # Create JSON response
-    filename = f"prometheus_events_{session_id or 'all'}.json"
+    filename = f"prometheus_events_enhanced_{session_id or 'all'}.json"
     json_content = json.dumps(export_data, indent=2)
     
     response = StreamingResponse(
         io.BytesIO(json_content.encode('utf-8')),
         media_type='application/json',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+    
+    return response
+
+@router.get("/events/export/ai_decisions")
+async def export_ai_decisions_csv(session_id: Optional[str] = None,
+                                 agent_id: Optional[str] = None,
+                                 day: Optional[int] = None):
+    """Export only AI decision events with detailed prompt and thinking data"""
+    # Get AI decision events specifically
+    events = event_logger.get_events(
+        limit=10000,  # Large limit for export
+        offset=0,
+        agent_id=agent_id,
+        event_type="ai_decision",  # Only AI decision events
+        day=day,
+        session_id=session_id
+    )
+    
+    # Create CSV content
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header focused on AI decision analysis
+    writer.writerow([
+        "ID", "Session ID", "Day", "Hour", "Minute", "Agent ID", "Agent Name", 
+        "AI_Decision", "Decision_Parameters", "Timestamp", 
+        "Full_Prompt_Content", "Thinking_Process"
+    ])
+    
+    # Write data rows with detailed AI decision analysis
+    for event in events:
+        # Parse decision details if available
+        decision_params = ""
+        try:
+            details_data = json.loads(event.details) if event.details else {}
+            decision_params = json.dumps(details_data.get("parameters", {}))
+        except:
+            decision_params = event.details or ""
+        
+        writer.writerow([
+            event.id, event.session_id, event.day, event.hour, event.minute,
+            event.agent_id, event.agent_name, 
+            event.ai_decision or "", decision_params, event.timestamp,
+            event.ai_prompt_content or "", event.ai_thinking_process or ""
+        ])
+    
+    # Create response
+    filename = f"prometheus_ai_decisions_{session_id or 'all'}.csv"
+    response = StreamingResponse(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        media_type='text/csv',
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
     

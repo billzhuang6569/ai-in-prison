@@ -40,8 +40,20 @@ function AgentCards() {
     return '#f44336';
   };
   
-  const handleCardClick = (agentId) => {
+  const handleCardClick = async (agentId) => {
     setSelectedAgent(agentId);
+    
+    // Call refresh API to get latest agent data
+    try {
+      const response = await fetch(`http://localhost:24861/api/v1/agents/${agentId}/refresh`);
+      if (response.ok) {
+        const refreshedData = await response.json();
+        // The data will be automatically updated via WebSocket, but we can trigger a store update if needed
+        console.log('Agent data refreshed:', refreshedData.agent.name);
+      }
+    } catch (error) {
+      console.error('Failed to refresh agent data:', error);
+    }
   };
   
   return (

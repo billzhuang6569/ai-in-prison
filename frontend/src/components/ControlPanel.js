@@ -13,6 +13,8 @@ function ControlPanel() {
   const [totalEvents, setTotalEvents] = useState(0);
   const [availableSessions, setAvailableSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState('');
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState(null);
   
   const handleStart = () => {
     startExperiment();
@@ -128,12 +130,23 @@ function ControlPanel() {
 
   // Load available sessions
   const loadSessions = async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
     try {
       const response = await fetch('http://localhost:24861/api/v1/sessions');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       const sessions = await response.json();
-      setAvailableSessions(sessions);
+      console.log('Loaded sessions:', sessions);
+      setAvailableSessions(sessions || []);
     } catch (error) {
       console.error('Error loading sessions:', error);
+      setSessionsError(error.message);
+      // Set empty array to prevent undefined issues
+      setAvailableSessions([]);
+    } finally {
+      setSessionsLoading(false);
     }
   };
 
@@ -158,6 +171,30 @@ function ControlPanel() {
       }
     } catch (error) {
       console.error('Export error:', error);
+    }
+  };
+
+  // Export AI decisions with prompt and thinking data
+  const exportAIDecisions = async () => {
+    try {
+      const sessionParam = selectedSession ? `?session_id=${selectedSession}` : '';
+      const response = await fetch(`http://localhost:24861/api/v1/events/export/ai_decisions${sessionParam}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = response.headers.get('Content-Disposition')?.split('filename=')[1] || `ai_decisions.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error('AI decisions export failed:', response.statusText);
+      }
+    } catch (error) {
+      console.error('AI decisions export error:', error);
     }
   };
 
@@ -250,11 +287,30 @@ function ControlPanel() {
       )}
       
       <h3>数据导出</h3>
+      <div style={{ 
+        marginBottom: '8px', 
+        padding: '6px', 
+        backgroundColor: '#333', 
+        borderRadius: '3px', 
+        fontSize: '10px', 
+        color: '#ccc',
+        lineHeight: '1.3'
+      }}>
+        <div><strong>导出选项说明：</strong></div>
+        <div>• <strong>导出 CSV</strong>：完整事件记录 + AI决策数据（13列）</div>
+        <div>• <strong>AI决策数据</strong>：专门的AI分析数据（12列，含完整prompt和thinking）</div>
+        <div>• <strong>导出 JSON</strong>：机器可读的结构化数据</div>
+      </div>
       <div style={{ marginBottom: '15px' }}>
         <div style={{ marginBottom: '10px' }}>
           <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ccc' }}>
-            选择会话:
+            选择会话: {sessionsLoading ? '(加载中...)' : sessionsError ? '(加载失败)' : `(${availableSessions.length}个可用)`}
           </label>
+          {sessionsError && (
+            <div style={{ fontSize: '10px', color: '#f44336', marginBottom: '5px' }}>
+              错误: {sessionsError}
+            </div>
+          )}
           <select 
             value={selectedSession} 
             onChange={(e) => setSelectedSession(e.target.value)}
@@ -269,9 +325,16 @@ function ControlPanel() {
             }}
           >
             <option value="">所有会话</option>
+            {/* Show current session if available */}
+            {worldState?.session_id && !availableSessions.find(s => s.session_id === worldState.session_id) && (
+              <option key={worldState.session_id} value={worldState.session_id}>
+                {worldState.session_id} (当前活跃会话)
+              </option>
+            )}
+            {/* Show historical sessions */}
             {availableSessions.map(session => (
               <option key={session.session_id} value={session.session_id}>
-                {session.session_id} ({session.start_time})
+                {session.session_id} ({session.event_count}事件, {session.days_count}天)
               </option>
             ))}
           </select>
@@ -289,6 +352,7 @@ function ControlPanel() {
               fontSize: '11px',
               cursor: 'pointer'
             }}
+            title="导出增强版CSV，包含事件数据和AI决策信息"
           >
             导出 CSV
           </button>
@@ -306,6 +370,22 @@ function ControlPanel() {
             }}
           >
             导出 JSON
+          </button>
+          
+          <button
+            onClick={exportAIDecisions}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#9C27B0',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+            title="导出AI决策数据，包含完整的prompt和thinking过程"
+          >
+            AI决策数据
           </button>
           
           {selectedSession && (

@@ -10,6 +10,8 @@ function AgentDetails() {
   const [detailView, setDetailView] = useState('thinking'); // 'thinking', 'prompt', 'memory', 'stats'
   const [agentPromptData, setAgentPromptData] = useState(null);
   const [loadingPromptData, setLoadingPromptData] = useState(false);
+  const [agentMemoryData, setAgentMemoryData] = useState(null);
+  const [loadingMemoryData, setLoadingMemoryData] = useState(false);
   
   const selectedAgentData = selectedAgent ? worldState?.agents[selectedAgent] : null;
   
@@ -45,6 +47,30 @@ function AgentDetails() {
     
     loadPromptData();
   }, [selectedAgent, worldState?.session_id, worldState?.agent_prompts]);
+
+  // Load agent memory data when memory tab is selected
+  useEffect(() => {
+    if (!selectedAgent || !worldState?.session_id || detailView !== 'memory') {
+      return;
+    }
+    
+    const loadMemoryData = async () => {
+      setLoadingMemoryData(true);
+      try {
+        const response = await fetch(`http://localhost:24861/api/v1/agents/${selectedAgent}/memory`);
+        if (response.ok) {
+          const memoryData = await response.json();
+          setAgentMemoryData(memoryData);
+        }
+      } catch (error) {
+        console.error('Error loading memory data:', error);
+      } finally {
+        setLoadingMemoryData(false);
+      }
+    };
+    
+    loadMemoryData();
+  }, [selectedAgent, worldState?.session_id, detailView]);
   
   if (!selectedAgent || !selectedAgentData) {
     return (
@@ -202,72 +228,112 @@ function AgentDetails() {
           <div>
             <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#6f42c1' }}>💭 记忆系统</h3>
             
-            {/* Short-term Memory */}
-            {selectedAgentData.enhanced_memory?.short_term?.length > 0 && (
-              <div style={{ marginBottom: '15px' }}>
-                <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#17a2b8' }}>🔄 短期记忆 (最近5条)</h4>
-                <div style={{ fontSize: '10px' }}>
-                  {selectedAgentData.enhanced_memory.short_term.map((memory, index) => (
-                    <div 
-                      key={index}
-                      style={{ 
-                        padding: '4px 6px', 
-                        margin: '2px 0',
-                        backgroundColor: '#333',
-                        borderRadius: '3px',
-                        borderLeft: '3px solid #17a2b8'
-                      }}
-                    >
-                      {memory}
-                    </div>
-                  ))}
-                </div>
+            {loadingMemoryData ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                ⏳ 加载记忆数据中...
               </div>
-            )}
-            
-            {/* Medium-term Summary */}
-            {selectedAgentData.enhanced_memory?.medium_term_summary && (
-              <div style={{ marginBottom: '15px' }}>
-                <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#28a745' }}>📚 中期记忆摘要</h4>
-                <div style={{ 
-                  fontSize: '10px', 
-                  color: '#ddd',
-                  backgroundColor: '#2a2a2a',
-                  padding: '6px',
-                  borderRadius: '3px',
-                  borderLeft: '3px solid #28a745'
-                }}>
-                  {selectedAgentData.enhanced_memory.medium_term_summary}
-                </div>
-              </div>
-            )}
-            
-            {/* Legacy Memory (if available) */}
-            {selectedAgentData.memory?.episodic?.length > 0 && (
+            ) : agentMemoryData ? (
               <div>
-                <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#ffc107' }}>📖 情节记忆</h4>
-                <div style={{ fontSize: '10px' }}>
-                  {selectedAgentData.memory.episodic.slice(-5).map((memory, index) => (
-                    <div 
-                      key={index}
-                      style={{ 
-                        padding: '4px 6px', 
-                        margin: '2px 0',
-                        backgroundColor: '#333',
-                        borderRadius: '3px',
-                        borderLeft: '3px solid #ffc107'
-                      }}
-                    >
-                      {memory}
+                {/* Complete History with Timestamps */}
+                {agentMemoryData.timestamped_history?.length > 0 && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#4caf50' }}>📚 完整历史记忆 (最新在上)</h4>
+                    <div style={{ 
+                      maxHeight: '250px', 
+                      overflowY: 'auto',
+                      fontSize: '9px',
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '3px',
+                      border: '1px solid #444'
+                    }}>
+                      {agentMemoryData.timestamped_history.map((entry, index) => (
+                        <div 
+                          key={index}
+                          style={{ 
+                            padding: '6px 8px', 
+                            margin: '0',
+                            borderBottom: index < agentMemoryData.timestamped_history.length - 1 ? '1px solid #333' : 'none',
+                            borderLeft: `3px solid ${
+                              entry.event_type === 'combat' ? '#f44336' :
+                              entry.event_type === 'speech' ? '#2196f3' :
+                              entry.event_type === 'movement' ? '#4caf50' :
+                              '#6f42c1'
+                            }`
+                          }}
+                        >
+                          <div style={{ 
+                            color: '#888', 
+                            fontSize: '8px', 
+                            marginBottom: '2px',
+                            fontWeight: 'bold'
+                          }}>
+                            🕒 {entry.timestamp}
+                          </div>
+                          <div style={{ color: '#ddd', lineHeight: '1.3' }}>
+                            {entry.content}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+                
+                {/* Thinking History */}
+                {agentMemoryData.thinking_history?.length > 0 && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#ff9800' }}>🧠 思考历史 (最近记录)</h4>
+                    <div style={{ 
+                      maxHeight: '120px', 
+                      overflowY: 'auto',
+                      fontSize: '9px',
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '3px',
+                      border: '1px solid #444'
+                    }}>
+                      {agentMemoryData.thinking_history.slice(-5).reverse().map((thinking, index) => (
+                        <div 
+                          key={index}
+                          style={{ 
+                            padding: '6px 8px', 
+                            margin: '0',
+                            borderBottom: index < Math.min(agentMemoryData.thinking_history.length, 5) - 1 ? '1px solid #333' : 'none',
+                            borderLeft: '3px solid #ff9800'
+                          }}
+                        >
+                          <div style={{ color: '#ddd', lineHeight: '1.3', whiteSpace: 'pre-wrap' }}>
+                            {thinking}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Short-term Memory */}
+                {agentMemoryData.enhanced_memory?.short_term?.length > 0 && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#17a2b8' }}>🔄 短期记忆缓存</h4>
+                    <div style={{ fontSize: '9px' }}>
+                      {agentMemoryData.enhanced_memory.short_term.map((memory, index) => (
+                        <div 
+                          key={index}
+                          style={{ 
+                            padding: '4px 6px', 
+                            margin: '2px 0',
+                            backgroundColor: '#333',
+                            borderRadius: '3px',
+                            borderLeft: '3px solid #17a2b8',
+                            fontSize: '9px'
+                          }}
+                        >
+                          {memory}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            
-            {!selectedAgentData.enhanced_memory?.short_term?.length && 
-             !selectedAgentData.enhanced_memory?.medium_term_summary &&
-             !selectedAgentData.memory?.episodic?.length && (
+            ) : (
               <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
                 暂无记忆数据
               </div>

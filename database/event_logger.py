@@ -22,6 +22,9 @@ class EventRecord:
     description: str
     details: str  # JSON string for additional details
     timestamp: str
+    ai_prompt_content: Optional[str] = None
+    ai_thinking_process: Optional[str] = None
+    ai_decision: Optional[str] = None
 
 class EventLogger:
     """Thread-safe event logger with SQLite backend"""
@@ -64,6 +67,19 @@ class EventLogger:
                 print("Adding session_id column to existing events table...")
                 conn.execute("ALTER TABLE events ADD COLUMN session_id TEXT NOT NULL DEFAULT 'legacy_session'")
             
+            # Add AI decision tracking columns if they don't exist
+            if 'ai_prompt_content' not in columns:
+                print("Adding AI prompt content column to existing events table...")
+                conn.execute("ALTER TABLE events ADD COLUMN ai_prompt_content TEXT")
+            
+            if 'ai_thinking_process' not in columns:
+                print("Adding AI thinking process column to existing events table...")
+                conn.execute("ALTER TABLE events ADD COLUMN ai_thinking_process TEXT")
+            
+            if 'ai_decision' not in columns:
+                print("Adding AI decision column to existing events table...")
+                conn.execute("ALTER TABLE events ADD COLUMN ai_decision TEXT")
+            
             # Create indexes for better query performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON events(session_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_id ON events(agent_id)")
@@ -75,7 +91,8 @@ class EventLogger:
     
     def log_event(self, session_id: str, day: int, hour: int, minute: int, agent_id: str, 
                   agent_name: str, event_type: str, description: str, 
-                  details: str = "") -> int:
+                  details: str = "", ai_prompt_content: str = None, 
+                  ai_thinking_process: str = None, ai_decision: str = None) -> int:
         """Log a new event and return the event ID"""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -83,10 +100,11 @@ class EventLogger:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.execute("""
                 INSERT INTO events (session_id, day, hour, minute, agent_id, agent_name, 
-                                  event_type, description, details, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  event_type, description, details, timestamp,
+                                  ai_prompt_content, ai_thinking_process, ai_decision)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (session_id, day, hour, minute, agent_id, agent_name, event_type, 
-                  description, details, timestamp))
+                  description, details, timestamp, ai_prompt_content, ai_thinking_process, ai_decision))
             
             event_id = cursor.lastrowid
             conn.commit()
@@ -130,6 +148,26 @@ class EventLogger:
             
             events = []
             for row in cursor.fetchall():
+                # Handle potential missing columns for backward compatibility
+                ai_prompt_content = None
+                ai_thinking_process = None
+                ai_decision = None
+                
+                try:
+                    ai_prompt_content = row["ai_prompt_content"]
+                except (KeyError, IndexError):
+                    pass
+                    
+                try:
+                    ai_thinking_process = row["ai_thinking_process"]
+                except (KeyError, IndexError):
+                    pass
+                    
+                try:
+                    ai_decision = row["ai_decision"]
+                except (KeyError, IndexError):
+                    pass
+                
                 events.append(EventRecord(
                     id=row["id"],
                     session_id=row["session_id"],
@@ -141,7 +179,10 @@ class EventLogger:
                     event_type=row["event_type"],
                     description=row["description"],
                     details=row["details"],
-                    timestamp=row["timestamp"]
+                    timestamp=row["timestamp"],
+                    ai_prompt_content=ai_prompt_content,
+                    ai_thinking_process=ai_thinking_process,
+                    ai_decision=ai_decision
                 ))
             
             conn.close()

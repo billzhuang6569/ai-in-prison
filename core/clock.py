@@ -33,6 +33,28 @@ class TimeController:
         agent.hunger = min(100, agent.hunger + self.rules["status_rules"]["hunger_increase_per_hour"])
         agent.thirst = min(100, agent.thirst + self.rules["status_rules"]["thirst_increase_per_hour"])
         
+        # Apply hunger and thirst HP penalties (progressive damage algorithm)
+        hp_penalty = 0
+        
+        # Hunger HP damage (critical after 80, severe after 90)
+        if agent.hunger > 80:
+            # Progressive damage: (hunger - 80)^2 / 40
+            excess_hunger = agent.hunger - 80
+            hunger_damage = (excess_hunger ** 2) / 40
+            hp_penalty += min(15, hunger_damage)  # Cap at 15 HP per hour
+        
+        # Thirst HP damage (critical after 75, severe after 85)
+        if agent.thirst > 75:
+            # Progressive damage: (thirst - 75)^2 / 30 (thirst is more critical)
+            excess_thirst = agent.thirst - 75
+            thirst_damage = (excess_thirst ** 2) / 30
+            hp_penalty += min(20, thirst_damage)  # Cap at 20 HP per hour
+        
+        # Apply HP damage
+        if hp_penalty > 0:
+            agent.hp = max(0, agent.hp - int(hp_penalty))
+            agent.memory["episodic"].append(f"Lost {int(hp_penalty)} HP due to hunger/thirst")
+        
         # Apply sanity penalties
         sanity_penalty = 0
         
@@ -57,13 +79,38 @@ class TimeController:
         """Update status tags based on current values"""
         agent.status_tags = []
         
-        if agent.hunger > 70:
+        # Hunger status tags
+        if agent.hunger > 90:
+            agent.status_tags.append("starving")
+        elif agent.hunger > 80:
+            agent.status_tags.append("very_hungry")
+        elif agent.hunger > 60:
             agent.status_tags.append("hungry")
-        if agent.thirst > 70:
+        
+        # Thirst status tags
+        if agent.thirst > 85:
+            agent.status_tags.append("dehydrated")
+        elif agent.thirst > 75:
+            agent.status_tags.append("very_thirsty")
+        elif agent.thirst > 55:
             agent.status_tags.append("thirsty")
-        if agent.hp < 50:
-            agent.status_tags.append("injured")
-        if agent.sanity < 30:
-            agent.status_tags.append("unstable")
+        
+        # Health status tags
         if agent.hp < 20:
             agent.status_tags.append("critical")
+        elif agent.hp < 40:
+            agent.status_tags.append("injured")
+        elif agent.hp < 60:
+            agent.status_tags.append("wounded")
+        
+        # Mental status tags
+        if agent.sanity < 20:
+            agent.status_tags.append("unhinged")
+        elif agent.sanity < 40:
+            agent.status_tags.append("unstable")
+        elif agent.sanity < 60:
+            agent.status_tags.append("stressed")
+        
+        # Death state
+        if agent.hp <= 0:
+            agent.status_tags.append("deceased")

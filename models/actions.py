@@ -68,31 +68,95 @@ class MoveAction(BaseAction):
         if target_x is None or target_y is None:
             return ActionResult(success=False, message="Invalid coordinates")
         
-        # Check if target position is adjacent
+        # Check if target position is within 8 steps (Manhattan distance)
         current_x, current_y = agent.position
-        if abs(target_x - current_x) > 1 or abs(target_y - current_y) > 1:
-            return ActionResult(success=False, message="Target position too far")
+        manhattan_distance = abs(target_x - current_x) + abs(target_y - current_y)
         
-        # Check if target position is within map bounds
-        if not (0 <= target_x < world_state.game_map.width and 0 <= target_y < world_state.game_map.height):
-            return ActionResult(success=False, message="Target position out of bounds")
+        # If target is too far, move to the farthest position in that direction
+        if manhattan_distance > 8:
+            # Calculate direction vector
+            dx = target_x - current_x
+            dy = target_y - current_y
+            
+            # Normalize direction while maintaining the intent
+            if dx == 0 and dy == 0:
+                return ActionResult(success=False, message="No movement intended")
+            
+            # Calculate the optimal position within 8 steps
+            # Use proportional scaling to maintain direction
+            if manhattan_distance > 0:
+                scale_factor = 8.0 / manhattan_distance
+                optimal_dx = int(dx * scale_factor)
+                optimal_dy = int(dy * scale_factor)
+                
+                # Ensure we don't exceed 8 steps total
+                if abs(optimal_dx) + abs(optimal_dy) > 8:
+                    # Adjust to exactly 8 steps, prioritizing larger component
+                    if abs(dx) >= abs(dy):
+                        optimal_dx = 8 if dx > 0 else -8 if dx < 0 else 0
+                        optimal_dy = 0
+                    else:
+                        optimal_dy = 8 if dy > 0 else -8 if dy < 0 else 0
+                        optimal_dx = 0
+                
+                target_x = current_x + optimal_dx
+                target_y = current_y + optimal_dy
+                
+                # Re-calculate actual distance to ensure we're within bounds
+                manhattan_distance = abs(target_x - current_x) + abs(target_y - current_y)
+        
+        # Check if target position is within map bounds, clamp if necessary
+        original_target_x, original_target_y = target_x, target_y
+        target_x = max(0, min(target_x, world_state.game_map.width - 1))
+        target_y = max(0, min(target_y, world_state.game_map.height - 1))
+        
+        # If we had to clamp, recalculate distance to ensure it's still within 8 steps
+        if (target_x, target_y) != (original_target_x, original_target_y):
+            manhattan_distance = abs(target_x - current_x) + abs(target_y - current_y)
+            if manhattan_distance > 8:
+                # Find the best position within 8 steps towards the clamped target
+                dx = target_x - current_x
+                dy = target_y - current_y
+                
+                if abs(dx) + abs(dy) > 8:
+                    # Prioritize the larger component
+                    if abs(dx) >= abs(dy):
+                        target_x = current_x + (8 if dx > 0 else -8 if dx < 0 else 0)
+                        target_y = current_y
+                    else:
+                        target_y = current_y + (8 if dy > 0 else -8 if dy < 0 else 0)
+                        target_x = current_x
+                
+                # Final bounds check after adjustment
+                target_x = max(0, min(target_x, world_state.game_map.width - 1))
+                target_y = max(0, min(target_y, world_state.game_map.height - 1))
         
         # Check if target position is occupied
         for other_agent in world_state.agents.values():
             if other_agent.agent_id != agent_id and other_agent.position == (target_x, target_y):
                 return ActionResult(success=False, message="Position occupied")
         
-        # Capture old position before moving
+        # Capture old position and original target before moving
         old_position = agent.position
+        original_request = kwargs.copy()
+        was_adjusted = (target_x != original_request.get('x') or target_y != original_request.get('y'))
         
         # Move agent
         agent.position = (target_x, target_y)
         agent.action_points -= self.ap_cost
         
-        # Add to memory
-        agent.memory["episodic"].append(f"Moved to position ({target_x}, {target_y})")
+        # Add to memory with adjustment info
+        if was_adjusted:
+            memory_entry = f"Attempted to move to ({original_request.get('x')}, {original_request.get('y')}), but moved to nearest reachable position ({target_x}, {target_y})"
+        else:
+            memory_entry = f"Moved to position ({target_x}, {target_y})"
+        agent.memory["episodic"].append(memory_entry)
         
         # Log to database
+        description = f"Moved to position ({target_x}, {target_y})"
+        if was_adjusted:
+            description += f" (adjusted from intended {original_request.get('x')}, {original_request.get('y')})"
+            
         event_logger.log_event(
             session_id=world_state.session_id,
             day=world_state.day,
@@ -101,8 +165,14 @@ class MoveAction(BaseAction):
             agent_id=agent_id,
             agent_name=agent.name,
             event_type="move",
-            description=f"Moved to position ({target_x}, {target_y})",
-            details=json.dumps({"from": list(old_position), "to": [target_x, target_y], "action_points_remaining": agent.action_points})
+            description=description,
+            details=json.dumps({
+                "from": list(old_position), 
+                "to": [target_x, target_y], 
+                "intended": [original_request.get('x'), original_request.get('y')],
+                "was_adjusted": was_adjusted,
+                "action_points_remaining": agent.action_points
+            })
         )
         
         world_state.event_log.append(f"{agent.name} moves to ({target_x}, {target_y})")

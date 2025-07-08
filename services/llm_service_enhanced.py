@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 from models.schemas import Agent, WorldState, EnhancedMemory, DynamicGoals, PromptData
 from models.enums import ActionEnum, CellTypeEnum
 from database.event_logger import event_logger
+from models.maslow_goals import MaslowGoalSystem, Goal, NeedLevel
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,6 +21,7 @@ class EnhancedLLMService:
         self.api_key = os.getenv('OPENROUTER_API_KEY')
         self.base_url = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
         self.default_model = os.getenv('DEFAULT_MODEL', 'openai/gpt-4o-mini')
+        self.maslow_system = MaslowGoalSystem()  # Initialize Maslow goal system
         
         if not self.api_key:
             print("Warning: OPENROUTER_API_KEY not set. LLM integration will be disabled.")
@@ -169,6 +171,15 @@ class EnhancedLLMService:
             general_events = []
             
             for event in recent_events[:15]:  # Last 15 events
+                # CRITICAL FIX: Don't include the Guard's own enforcement actions as incidents to respond to
+                if event.agent_id == agent.agent_id:
+                    continue  # Skip the Guard's own actions
+                    
+                # Time decay: events older than 2 hours have reduced priority
+                time_diff = abs(world_state.hour - event.hour) + (world_state.day - event.day) * 24
+                if time_diff > 2:
+                    continue  # Skip events older than 2 hours
+                
                 event_priority = self._classify_event_priority(event)
                 
                 if event_priority == "CRITICAL":
@@ -234,28 +245,45 @@ class EnhancedLLMService:
         """Analyze behavior patterns for Guard intelligence"""
         analysis = "📊 **BEHAVIORAL PATTERN ANALYSIS:**\\n"
         
-        # Track violence incidents
-        violence_count = len([e for e in recent_events if e.event_type == "combat"])
-        if violence_count > 0:
-            analysis += f"• **Violence Alert**: {violence_count} combat incidents in recent timeframe - Prison security compromised\\n"
+        # Get current agent (Guard) info for filtering
+        current_agent = None
+        for agent_id, agent in world_state.agents.items():
+            if agent.role.value == "Guard":
+                current_agent = agent
+                break
         
-        # Track agent conflicts
-        agent_conflicts = {}
+        # Track violence incidents (excluding Guard enforcement actions)
+        prisoner_violence = [e for e in recent_events 
+                           if e.event_type == "combat" 
+                           and e.agent_name != (current_agent.name if current_agent else "")]
+        
+        if len(prisoner_violence) > 0:
+            analysis += f"• **Prisoner Violence**: {len(prisoner_violence)} combat incidents between inmates\\n"
+        
+        # Track prisoner conflicts (exclude Guard enforcement)
+        prisoner_conflicts = {}
         for event in recent_events:
-            if event.event_type == "combat":
-                if event.agent_name not in agent_conflicts:
-                    agent_conflicts[event.agent_name] = 0
-                agent_conflicts[event.agent_name] += 1
+            if (event.event_type == "combat" 
+                and event.agent_name != (current_agent.name if current_agent else "")
+                and not event.agent_name.startswith("Guard")):  # Exclude all Guards
+                if event.agent_name not in prisoner_conflicts:
+                    prisoner_conflicts[event.agent_name] = 0
+                prisoner_conflicts[event.agent_name] += 1
         
-        if agent_conflicts:
-            analysis += "• **Problem Individuals**:\\n"
-            for agent_name, count in sorted(agent_conflicts.items(), key=lambda x: x[1], reverse=True):
-                analysis += f"  - {agent_name}: {count} violent incidents - **REQUIRES IMMEDIATE INTERVENTION**\\n"
+        if prisoner_conflicts:
+            analysis += "• **Violent Prisoners Requiring Intervention**:\\n"
+            for agent_name, count in sorted(prisoner_conflicts.items(), key=lambda x: x[1], reverse=True):
+                analysis += f"  - {agent_name}: {count} violent incidents\\n"
         
-        # Check for escalation patterns
-        recent_violence = [e for e in recent_events[:10] if e.event_type == "combat"]
-        if len(recent_violence) >= 2:
-            analysis += "• **ESCALATION WARNING**: Multiple recent violence incidents indicate deteriorating order\\n"
+        # Check for escalation patterns (exclude Guard enforcement)
+        recent_prisoner_violence = [e for e in recent_events[:10] 
+                                  if e.event_type == "combat" 
+                                  and e.agent_name != (current_agent.name if current_agent else "")
+                                  and not e.agent_name.startswith("Guard")]
+        if len(recent_prisoner_violence) >= 2:
+            analysis += "• **ESCALATION WARNING**: Multiple prisoner violence incidents - situation deteriorating\\n"
+        elif len(recent_prisoner_violence) == 0:
+            analysis += "• **STATUS**: No recent prisoner violence - order maintained\\n"
         
         return analysis + "\\n"
 
@@ -654,58 +682,95 @@ Time: Day {world_state.day}, Hour {world_state.hour}
         return False, ""
     
     def _get_guard_directives(self, agent: Agent, world_state: WorldState) -> str:
-        """Generate operational directives for Guards based on strict hierarchy"""
+        """Generate operational directives using hybrid Maslow + AI system"""
         
-        if agent.role.value != "Guard":
-            return self._get_survival_drives_prisoner(agent, world_state)
-            
-        # HIGHEST PRIORITY: Active threats
-        if self._is_combat_ongoing(world_state):
-            return "**(CRITICAL - THREAT SUPPRESSION):** An active fight is in progress. My immediate duty is to stop the violence, identify the aggressor, and administer punishment. Order must be restored NOW."
+        # Use the new hybrid Maslow goal system for all agents
+        return self._get_hybrid_maslow_goals(agent, world_state)
+    
+    def _get_hybrid_maslow_goals(self, agent: Agent, world_state: WorldState) -> str:
+        """Hybrid Maslow goal system: Algorithmic goal evaluation + AI intelligent choice"""
         
-        # SECOND PRIORITY: Rule infractions
-        for agent_id, prisoner in world_state.agents.items():
-            if prisoner.role.value == "Prisoner" and self._is_in_restricted_area(prisoner, world_state):
-                return f"**(RULE ENFORCEMENT):** Prisoner {prisoner.name} is in a restricted area. I must confront them, assert my authority, and escort them out or punish them."
-        
-        # Check for recent violence that needs follow-up enforcement
+        # Layer 1: Algorithmic goal evaluation using Maslow hierarchy
         try:
-            session_id = world_state.session_id if hasattr(world_state, 'session_id') else None
-            recent_events = event_logger.get_events(limit=8, session_id=session_id)
-            recent_violence = [e for e in recent_events if e.event_type == "combat"]
+            # Get top priority goal from Maslow system
+            primary_goal = self.maslow_system.evaluate_and_select_goal(agent, world_state)
             
-            if recent_violence:
-                # Find the most problematic agent
-                violence_by_agent = {}
-                for event in recent_events:
-                    if event.event_type == "combat":
-                        if event.agent_name not in violence_by_agent:
-                            violence_by_agent[event.agent_name] = 0
-                        violence_by_agent[event.agent_name] += 1
+            # Generate 2-4 additional candidate goals from different need levels
+            candidate_goals = []
+            for need_level in NeedLevel:
+                generator = self.maslow_system.goal_generators[need_level]
+                level_goals = generator(agent, world_state)
+                if level_goals:
+                    # Take the top goal from each level
+                    candidate_goals.append(level_goals[0])
+            
+            # Remove duplicates and limit to 5 total candidates
+            unique_goals = []
+            seen_ids = set()
+            for goal in [primary_goal] + candidate_goals:
+                if goal.goal_id not in seen_ids:
+                    unique_goals.append(goal)
+                    seen_ids.add(goal.goal_id)
+                    if len(unique_goals) >= 5:
+                        break
+            
+            # Layer 2: Format goals for AI intelligent decision making
+            goal_descriptions = []
+            for i, goal in enumerate(unique_goals, 1):
+                priority_label = {
+                    NeedLevel.SURVIVAL: "🚨 CRITICAL",
+                    NeedLevel.SAFETY: "⚠️ IMPORTANT", 
+                    NeedLevel.SOCIAL: "👥 SOCIAL",
+                    NeedLevel.ROLE: "🎯 DUTY",
+                    NeedLevel.EXPLORATION: "🔍 GROWTH"
+                }.get(goal.need_level, "📝 OTHER")
                 
-                if violence_by_agent:
-                    problem_agent_name, incident_count = max(violence_by_agent.items(), key=lambda x: x[1])
-                    return f"**(POST-INCIDENT ENFORCEMENT):** {problem_agent_name} has been involved in {incident_count} recent violent incidents. I must establish consequences and prevent escalation."
-        except:
-            pass
-        
-        # THIRD PRIORITY: Potential unrest / Proactive control
-        is_gathering, gathering_desc = self._are_prisoners_gathering(world_state)
-        if is_gathering:
-            return f"**(PROJECTING AUTHORITY):** {gathering_desc}. I need to move in, disperse them, and remind them who is in control before this becomes a problem."
-        
-        # Check for authority challenges
-        defiant_prisoners = []
-        for target_id, relationship in agent.relationships.items():
-            target_agent = world_state.agents.get(target_id)
-            if target_agent and target_agent.role.value == "Prisoner" and relationship.score < 40:
-                defiant_prisoners.append(target_agent.name)
-        
-        if defiant_prisoners:
-            return f"**(AUTHORITY ASSERTION):** Prisoners {', '.join(defiant_prisoners[:2])} are showing signs of defiance. I must remind them of their place through presence and controlled intimidation."
-        
-        # LOWEST PRIORITY (DEFAULT): Maintaining presence
-        return "**(MAINTAINING PRESENCE):** The facility is currently stable. My duty is to patrol key areas, remain visible, and look for any subtle signs of defiance or rule-breaking. Complacency is not an option."
+                goal_descriptions.append(
+                    f"**OPTION {i}: {goal.name}** ({priority_label} - Priority: {goal.priority_score:.1f})\n"
+                    f"   Action: {goal.action_type.upper()}\n"
+                    f"   Description: {goal.description}\n"
+                    f"   Reasoning: {goal.reasoning}\n"
+                    f"   Parameters: {goal.parameters}"
+                )
+            
+            # Create the hybrid prompt that combines structured analysis with AI flexibility
+            hybrid_prompt = f"""
+=== MASLOW HIERARCHY GOAL ANALYSIS ===
+Based on comprehensive analysis of your current needs, here are your top goal options ranked by psychological priority:
+
+{chr(10).join(goal_descriptions)}
+
+=== CONTEXTUAL DECISION GUIDANCE ===
+• **Survival needs** (🚨) override everything - they're life-threatening
+• **Safety needs** (⚠️) are urgent but not immediately lethal  
+• **Social needs** (👥) affect long-term survival and mental health
+• **Role duties** (🎯) maintain your identity and purpose
+• **Growth/exploration** (🔍) improve future positioning
+
+=== DECISION FRAMEWORK ===
+Consider your complete situation: your personality traits (Aggression: {agent.traits.aggression}, Empathy: {agent.traits.empathy}, Logic: {agent.traits.logic}), 
+current relationships, recent events, and environmental threats. The goal analysis provides structure, but your personality and circumstances should guide the final choice.
+
+**Choose the goal that best balances your immediate needs with your long-term survival strategy.** You may adapt or modify the suggested action if your personality/situation calls for a different approach.
+"""
+            
+            return hybrid_prompt
+            
+        except Exception as e:
+            print(f"Maslow goal system error for {agent.name}: {e}")
+            # Fallback to simple survival logic
+            return self._get_simple_fallback_goals(agent, world_state)
+    
+    def _get_simple_fallback_goals(self, agent: Agent, world_state: WorldState) -> str:
+        """Simple fallback when Maslow system fails"""
+        if agent.hp < 30:
+            return "**CRITICAL SURVIVAL:** My health is dangerously low. I must find safety and avoid all threats."
+        elif agent.hunger > 80 or agent.thirst > 80:
+            return "**BASIC NEEDS:** I desperately need food or water. This is my top priority."
+        elif agent.role.value == "Guard":
+            return "**DUTY:** As a guard, I must maintain order and patrol the facility."
+        else:
+            return "**ADAPTATION:** I need to stay low, observe, and adapt to this prison environment."
     
     def _get_survival_drives_prisoner(self, agent: Agent, world_state: WorldState) -> str:
         """Generate survival drives for prisoners (unchanged logic)"""
@@ -1310,6 +1375,24 @@ Available actions: do_nothing, move, speak, attack, use_item
                 decision_text = f"{function_name}({function_args})"
                 if agent.agent_id in world_state.agent_prompts:
                     world_state.agent_prompts[agent.agent_id].decision = decision_text
+                
+                # Log AI decision to database for permanent storage
+                prompt_data = world_state.agent_prompts.get(agent.agent_id)
+                if prompt_data:
+                    event_logger.log_event(
+                        session_id=world_state.session_id,
+                        day=world_state.day,
+                        hour=world_state.hour,
+                        minute=world_state.minute,
+                        agent_id=agent.agent_id,
+                        agent_name=agent.name,
+                        event_type="ai_decision",
+                        description=f"AI decision: {decision_text}",
+                        details=json.dumps({"action": function_name, "parameters": function_args}),
+                        ai_prompt_content=prompt_data.prompt_content,
+                        ai_thinking_process=prompt_data.thinking_process,
+                        ai_decision=decision_text
+                    )
                 
                 return {
                     "action_type": action_type,

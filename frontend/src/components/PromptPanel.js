@@ -8,6 +8,38 @@ function PromptPanel() {
   const { worldState } = useWorldStore();
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   
+  // Export AI decisions for selected agent
+  const exportAgentAIDecisions = async () => {
+    if (!selectedAgentId) {
+      alert('请先选择一个Agent');
+      return;
+    }
+    
+    try {
+      const sessionParam = worldState?.session_id ? `?session_id=${worldState.session_id}&agent_id=${selectedAgentId}` : `?agent_id=${selectedAgentId}`;
+      const response = await fetch(`http://localhost:24861/api/v1/events/export/ai_decisions${sessionParam}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const filename = response.headers.get('Content-Disposition')?.split('filename=')[1] || `agent_${selectedAgentId}_ai_decisions.csv`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error('Export failed:', response.statusText);
+        alert('导出失败');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('导出出错');
+    }
+  };
+  
   if (!worldState || !worldState.agent_prompts) {
     return (
       <div className="panel">
@@ -51,6 +83,27 @@ function PromptPanel() {
             </option>
           ))}
         </select>
+        
+        {/* Export Button */}
+        {selectedAgentId && (
+          <button
+            onClick={exportAgentAIDecisions}
+            style={{
+              marginTop: '8px',
+              width: '100%',
+              padding: '6px 12px',
+              backgroundColor: '#9C27B0',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+            title={`导出 ${agentPrompts[selectedAgentId]?.agent_name} 的AI决策数据`}
+          >
+            📊 导出此Agent的AI决策数据
+          </button>
+        )}
       </div>
 
       {/* Quick Overview */}
