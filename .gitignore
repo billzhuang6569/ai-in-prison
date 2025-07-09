@@ -72,3 +72,7 @@ doc/iTerm/
 
 # Cache
 .cache/
+
+# Claude Code documentation (temporary files)
+CLAUDE.md
+CLAUDE_PLAN.md
