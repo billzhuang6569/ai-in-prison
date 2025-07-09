@@ -57,8 +57,8 @@ async def start_experiment(config: ExperimentConfig = ExperimentConfig()):
         # Configure the LLM model before starting
         manager.game_engine.set_model(config.model)
         
-        # Pass guard_count and prisoner_count to the experiment
-        await manager.start_experiment(config.guard_count, config.prisoner_count)
+        # Pass guard_count, prisoner_count, and duration_days to the experiment
+        await manager.start_experiment(config.guard_count, config.prisoner_count, config.duration_days)
         return {
             "message": "Experiment started successfully", 
             "config": config.dict(),
@@ -480,25 +480,51 @@ async def export_events_csv(session_id: Optional[str] = None,
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write enhanced header with AI decision data columns
+    # Write enhanced header with AI decision data columns and agent state
     writer.writerow([
         "ID", "Session ID", "Day", "Hour", "Minute", "Agent ID", 
         "Agent Name", "Event Type", "Description", "Details", "Timestamp",
-        "AI_Prompt_Content", "AI_Thinking_Process", "AI_Decision"
+        "AI_Prompt_Content", "AI_Thinking_Process", "AI_Decision",
+        "Agent_HP", "Agent_Sanity", "Agent_Hunger", "Agent_Thirst", "Agent_Strength",
+        "Agent_Position_X", "Agent_Position_Y", "Agent_Action_Points", "Agent_Status_Tags",
+        "Agent_Inventory_Count", "Agent_Relationships_Count"
     ])
     
-    # Write data rows with enhanced AI decision data
+    # Get current world state to add agent status info
+    from api.websockets import manager
+    world_state = manager.game_engine.get_world_state()
+    
+    # Write data rows with enhanced AI decision data and agent state
     for event in events:
         # Use AI decision data directly from the database
         ai_prompt = event.ai_prompt_content or ""
         ai_thinking = event.ai_thinking_process or ""
         ai_decision = event.ai_decision or ""
         
+        # Get agent state at the time of event (use current state as approximation)
+        agent_hp = agent_sanity = agent_hunger = agent_thirst = agent_strength = ""
+        agent_pos_x = agent_pos_y = agent_ap = agent_status = agent_inv = agent_rel = ""
+        
+        if world_state and event.agent_id in world_state.agents:
+            agent = world_state.agents[event.agent_id]
+            agent_hp = agent.hp
+            agent_sanity = agent.sanity
+            agent_hunger = agent.hunger
+            agent_thirst = agent.thirst
+            agent_strength = agent.strength
+            agent_pos_x, agent_pos_y = agent.position
+            agent_ap = agent.action_points
+            agent_status = ",".join(agent.status_tags)
+            agent_inv = len(agent.inventory)
+            agent_rel = len(agent.relationships)
+        
         writer.writerow([
             event.id, event.session_id, event.day, event.hour, event.minute,
             event.agent_id, event.agent_name, event.event_type, 
             event.description, event.details, event.timestamp,
-            ai_prompt, ai_thinking, ai_decision
+            ai_prompt, ai_thinking, ai_decision,
+            agent_hp, agent_sanity, agent_hunger, agent_thirst, agent_strength,
+            agent_pos_x, agent_pos_y, agent_ap, agent_status, agent_inv, agent_rel
         ])
     
     # Create response
@@ -539,26 +565,51 @@ async def export_events_json(session_id: Optional[str] = None,
             },
             "exported_at": event_logger.get_events(limit=1)[0].timestamp if events else None
         },
-        "events": [
-            {
-                "id": e.id,
-                "session_id": e.session_id,
-                "day": e.day,
-                "hour": e.hour,
-                "minute": e.minute,
-                "agent_id": e.agent_id,
-                "agent_name": e.agent_name,
-                "event_type": e.event_type,
-                "description": e.description,
-                "details": e.details,
-                "timestamp": e.timestamp,
-                "ai_prompt_content": e.ai_prompt_content,
-                "ai_thinking_process": e.ai_thinking_process,
-                "ai_decision": e.ai_decision
-            }
-            for e in events
-        ]
+        "events": []
     }
+    
+    # Get current world state to add agent status info
+    from api.websockets import manager
+    world_state = manager.game_engine.get_world_state()
+    
+    # Add events with agent state data
+    for e in events:
+        event_data = {
+            "id": e.id,
+            "session_id": e.session_id,
+            "day": e.day,
+            "hour": e.hour,
+            "minute": e.minute,
+            "agent_id": e.agent_id,
+            "agent_name": e.agent_name,
+            "event_type": e.event_type,
+            "description": e.description,
+            "details": e.details,
+            "timestamp": e.timestamp,
+            "ai_prompt_content": e.ai_prompt_content,
+            "ai_thinking_process": e.ai_thinking_process,
+            "ai_decision": e.ai_decision,
+            "agent_state": {}
+        }
+        
+        # Add agent state at the time of event (use current state as approximation)
+        if world_state and e.agent_id in world_state.agents:
+            agent = world_state.agents[e.agent_id]
+            event_data["agent_state"] = {
+                "hp": agent.hp,
+                "sanity": agent.sanity,
+                "hunger": agent.hunger,
+                "thirst": agent.thirst,
+                "strength": agent.strength,
+                "position": {"x": agent.position[0], "y": agent.position[1]},
+                "action_points": agent.action_points,
+                "status_tags": agent.status_tags,
+                "inventory_count": len(agent.inventory),
+                "relationships_count": len(agent.relationships),
+                "role": agent.role.value
+            }
+        
+        export_data["events"].append(event_data)
     
     # Create JSON response
     filename = f"prometheus_events_enhanced_{session_id or 'all'}.json"

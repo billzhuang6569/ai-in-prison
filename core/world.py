@@ -44,6 +44,8 @@ class World:
             day=1,
             hour=8,
             is_running=False,
+            max_days=14,
+            last_agent_action_time=8,  # Initialize to start time (Day 1, Hour 8)
             agents={},
             game_map=game_map,
             event_log=["World initialized", "Agents ready for activation"]
@@ -85,6 +87,9 @@ class World:
             guard_count = self.rules["initial_setup"]["guard_prisoner_ratio"][0]
         if prisoner_count is None:
             prisoner_count = self.rules["initial_setup"]["guard_prisoner_ratio"][1]
+        
+        print(f"Creating {guard_count} guards and {prisoner_count} prisoners")
+        self.state.event_log.append(f"Creating {guard_count} guards and {prisoner_count} prisoners")
         
         # Create guards
         for i in range(guard_count):

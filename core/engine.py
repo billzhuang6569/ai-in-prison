@@ -33,14 +33,17 @@ class GameEngine:
         self.llm_service.default_model = model_name
         print(f"LLM model set to: {model_name}")
     
-    async def start_simulation(self, guard_count=None, prisoner_count=None):
-        """Start the simulation loop with optional agent counts"""
-        if not self.world.state:
-            self.world.initialize_world(guard_count, prisoner_count)
+    async def start_simulation(self, guard_count=None, prisoner_count=None, duration_days=14):
+        """Start the simulation loop with optional agent counts and duration"""
+        # Always reinitialize world state for new experiment
+        self.world.initialize_world(guard_count, prisoner_count)
         
         # Start new session for this experiment
         session_id = session_manager.start_new_session()
         self.world.state.session_id = session_id
+        
+        # Set experiment duration
+        self.world.state.max_days = duration_days
         
         self.is_running = True
         self.world.state.is_running = True
@@ -48,8 +51,43 @@ class GameEngine:
         await self._broadcast_state()
         
         while self.is_running:
+            # Check stopping conditions before each turn
+            if self._should_stop_experiment():
+                break
+                
             await self._execute_turn()
             await asyncio.sleep(self.turn_delay)
+        
+        # End experiment
+        self.stop_simulation()
+    
+    def _should_stop_experiment(self) -> bool:
+        """Check if the experiment should stop based on stopping conditions"""
+        if not self.world.state:
+            return True
+            
+        # Condition 1: Reached maximum experiment duration
+        if hasattr(self.world.state, 'max_days') and self.world.state.day > self.world.state.max_days:
+            self.world.state.event_log.append(f"🏁 EXPERIMENT ENDED: Reached maximum duration of {self.world.state.max_days} days")
+            print(f"Experiment ended: Reached maximum duration of {self.world.state.max_days} days")
+            return True
+        
+        # Condition 2: All agents are dead
+        alive_agents = [agent for agent in self.world.state.agents.values() if agent.hp > 0]
+        if not alive_agents:
+            self.world.state.event_log.append("🏁 EXPERIMENT ENDED: All agents have died")
+            print("Experiment ended: All agents have died")
+            return True
+        
+        # Condition 3: No agent has taken action for more than 24 hours (system failure)
+        if hasattr(self.world.state, 'last_agent_action_time'):
+            time_since_action = (self.world.state.day - 1) * 24 + self.world.state.hour - self.world.state.last_agent_action_time
+            if time_since_action > 24:
+                self.world.state.event_log.append("🏁 EXPERIMENT ENDED: No agent activity for 24+ hours (system failure)")
+                print("Experiment ended: No agent activity for 24+ hours")
+                return True
+        
+        return False
     
     def stop_simulation(self):
         """Stop the simulation"""
@@ -79,6 +117,8 @@ class GameEngine:
             self.world.state.event_log.append("⚠️ ALL AGENTS INCAPACITATED - Simulation continuing with empty turns")
         
         active_agents_this_turn = 0
+        successful_actions_this_turn = 0
+        
         for agent_id in agent_ids:
             agent = self.world.state.agents[agent_id]
             
@@ -93,10 +133,22 @@ class GameEngine:
                 action_result = await self._execute_agent_action(agent_id)
                 if not action_result.success:
                     break  # If action fails, skip remaining actions
+                    
+                # Check if this was a real action (not just an LLM failure)
+                if "LLM ERROR" not in action_result.message:
+                    successful_actions_this_turn += 1
+                    # Update last agent action time
+                    self.world.state.last_agent_action_time = (self.world.state.day - 1) * 24 + self.world.state.hour
         
-        # Log if no agents took actions this turn
+        # Log if no agents took successful actions this turn
         if active_agents_this_turn == 0:
             self.world.state.event_log.append(f"⚠️ No active agents on Day {self.world.state.day}, Hour {self.world.state.hour}")
+        elif successful_actions_this_turn == 0:
+            self.world.state.event_log.append(f"⚠️ No successful agent actions on Day {self.world.state.day}, Hour {self.world.state.hour} (LLM failures)")
+        
+        # Initialize last_agent_action_time if not set
+        if not hasattr(self.world.state, 'last_agent_action_time'):
+            self.world.state.last_agent_action_time = (self.world.state.day - 1) * 24 + self.world.state.hour
         
         # Phase 3: Broadcast updated state
         await self._broadcast_state()
@@ -133,29 +185,11 @@ class GameEngine:
         else:
             self.world.state.event_log.append(f"[LLM] Service not available for {agent.name}, using random action")
         
-        # Fallback to random action selection
-        self.world.state.event_log.append(f"[Random] {agent.name} using random action (LLM failed)")
-        available_actions = self._get_available_actions(agent)
+        # LLM failed - agent does nothing and system notifies user
+        self.world.state.event_log.append(f"⚠️ [LLM ERROR] {agent.name} cannot act due to LLM failure - skipping turn")
         
-        if not available_actions:
-            return ActionResult(success=False, message="No available actions")
-        
-        # Random action selection
-        action_type = random.choice(available_actions)
-        action_class = ACTION_REGISTRY[action_type]
-        action = action_class()
-        
-        # Generate random parameters based on action type
-        kwargs = self._generate_action_parameters(action_type, agent_id)
-        
-        # Execute action
-        if action.can_execute(self.world.state, agent_id, **kwargs):
-            result = action.execute(self.world.state, agent_id, **kwargs)
-            if result.success:
-                self.world.state.event_log.append(f"[Random] {agent.name} performed {action_type.value}")
-            return result
-        else:
-            return ActionResult(success=False, message="Action cannot be executed")
+        # Return successful result but with no action taken
+        return ActionResult(success=True, message=f"LLM failed for {agent.name} - agent skipped turn")
     
     def _get_available_actions(self, agent: Agent) -> List[ActionEnum]:
         """Get list of available actions for an agent"""

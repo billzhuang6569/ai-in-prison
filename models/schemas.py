@@ -97,6 +97,8 @@ class WorldState(BaseModel):
     hour: int = 8
     minute: int = 0
     is_running: bool = False
+    max_days: int = 14  # Maximum experiment duration in days
+    last_agent_action_time: int = 0  # Last time an agent took action (in hours from start)
     agents: Dict[str, Agent] = {}  # key: agent_id
     game_map: GameMap
     event_log: List[str] = []

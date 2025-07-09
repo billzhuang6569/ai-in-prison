@@ -459,33 +459,40 @@ class EnhancedLLMService:
         return analysis + "\\n"
 
     def _get_full_map_status(self, world_state: WorldState) -> str:
-        """Get comprehensive map awareness"""
-        status = "\\n=== FULL PRISON STATUS ===\\n"
+        """Get comprehensive map awareness with precise positioning"""
+        status = "\\n=== PRISON SURVEILLANCE GRID ===\\n"
         
-        # Agent locations by area
-        area_agents = {}
+        # Personnel locations with exact coordinates
+        status += "**PERSONNEL POSITIONS:**\\n"
         for agent_id, agent in world_state.agents.items():
             x, y = agent.position
             cell_key = f"{x},{y}"
             cell_type = world_state.game_map.cells.get(cell_key, CellTypeEnum.CELL_BLOCK)
             area_name = cell_type.value.replace("_", " ").title()
             
-            if area_name not in area_agents:
-                area_agents[area_name] = []
-            area_agents[area_name].append(f"{agent.name} ({agent.role.value})")
-        
-        for area, agents in area_agents.items():
-            status += f"• {area}: {', '.join(agents)}\\n"
+            # Add status indicators for quick assessment
+            status_indicators = []
+            if agent.hp < 50:
+                status_indicators.append("🩸INJURED")
+            if agent.sanity < 30:
+                status_indicators.append("🧠UNSTABLE")
+            if agent.hunger > 70:
+                status_indicators.append("🍽️HUNGRY")
             
-        # Items on map
+            status_indicator_str = f" [{', '.join(status_indicators)}]" if status_indicators else ""
+            status += f"• **{agent.name}** ({agent.role.value}) at ({x},{y}) - {area_name}{status_indicator_str}\\n"
+        
+        # Resource locations
         if world_state.game_map.items:
-            status += "\\n=== AVAILABLE ITEMS ===\\n"
+            status += "\\n**RESOURCE INVENTORY:**\\n"
             for location, items in world_state.game_map.items.items():
                 x, y = location.split(',')
                 cell_type = world_state.game_map.cells.get(location, CellTypeEnum.CELL_BLOCK)
                 area_name = cell_type.value.replace("_", " ").title()
                 item_names = [item.name for item in items]
                 status += f"• {area_name} ({x},{y}): {', '.join(item_names)}\\n"
+        else:
+            status += "\\n**RESOURCE INVENTORY:**\\n• No items detected on surveillance grid\\n"
                 
         return status
     
@@ -643,10 +650,10 @@ Time: Day {world_state.day}, Hour {world_state.hour}
         # Sanity descriptors - value-based mapping with variety
         sanity_ranges = [
             (0, 20, [
-                "My mind is completely fracturing. I can barely form coherent thoughts",
-                "I feel like I'm losing my grip on reality completely",
-                "The walls are breathing, nothing makes sense anymore",
-                "I'm going insane and I know it, but I can't stop it"
+                "My mind is completely fracturing. I can barely form coherent thoughts and might act on pure instinct",
+                "I feel like I'm losing my grip on reality completely. Logic is failing me and I'm driven by raw emotion",
+                "The walls are breathing, nothing makes sense anymore. I might do something completely irrational",
+                "I'm going insane and I know it, but I can't stop it. My survival instincts are overriding all rational thought"
             ]),
             (21, 50, [
                 "The walls are closing in on me mentally. My thoughts feel scattered",
@@ -710,12 +717,13 @@ Time: Day {world_state.day}, Hour {world_state.hour}
                 descriptors['hp'] = random.choice(descriptions)
                 break
         
-        # Sanity descriptors - professional mindset
+        # Sanity descriptors - professional mindset with logic override at critical levels
         sanity_ranges = [
             (0, 20, [
-                "My mind is fracturing but I cannot let inmates see instability in their authority figure",
-                "I'm losing mental coherence but must maintain the facade of control",
-                "My psychological state is deteriorating - this could compromise security"
+                "My mind is fracturing and I can feel my professional judgment slipping. The rage/fear is starting to override my training",
+                "I'm losing control and my tactical thinking is being clouded by emotional extremes. I might make irrational decisions",
+                "My psychological breakdown is imminent - logic is failing me and I'm operating on pure instinct and emotion now",
+                "The pressure has cracked something inside me. My professional composure is a thin mask barely hiding the chaos beneath"
             ]),
             (21, 50, [
                 "The stress is getting to me, but I maintain professional composure",
@@ -1272,11 +1280,10 @@ Step 3: Evaluate Courses of Action (COA) - What are my options and their impact 
 - COA 5: `use_item` [...] - Impact on Order: [...] Tactical Advantage: [...]
 
 Step 4: Execute Command - What action will I take?
-My duty dictates I execute [chosen action] because it is the most effective way to [reiterate how the action serves the directive]
+My duty dictates I execute [chosen action] because it is the most effective way to [reiterate how the action serves the directive]{f'\\n\\n**LOGIC OVERRIDE WARNING**: My sanity is critically low ({agent.sanity}/100). My professional judgment may be compromised by emotional extremes. I might choose actions based on rage, fear, or desperation rather than tactical optimization.' if agent.sanity < 20 else ''}
 </Thinking>
 
 **After your tactical analysis, you MUST call one of the available functions to execute your decision.**
-Available actions: do_nothing, move, speak, attack, use_item
 """
         
         return prompt
@@ -1412,11 +1419,10 @@ Step 3: Options & Risks - What are my choices?
 - Option E: `use_item` [what?] - Risk: [what could go wrong?] Benefit: [what's the upside?]
 
 Step 4: Decision - What will I do?
-Based on my analysis, I will... [choose one action and explain why it's the best choice right now]
+Based on my analysis, I will... [choose one action and explain why it's the best choice right now]{f'\\n\\n**MENTAL BREAKDOWN WARNING**: My sanity is critically low ({agent.sanity}/100). My thinking is fractured and I might act on pure emotion, fear, or desperation rather than rational survival strategy.' if agent.sanity < 20 else ''}
 </Thinking>
 
 **After your thinking, you MUST call one of the available functions to take action.**
-Available actions: do_nothing, move, speak, attack, use_item
 """
         
         return prompt
@@ -1427,20 +1433,68 @@ Available actions: do_nothing, move, speak, attack, use_item
         # Get base prompt
         base_prompt = await self._build_prompt(agent, world_state)
         
-        # Add contextual actions information
-        actions_info = "\n\n## CONTEXTUAL ACTIONS ANALYSIS\n"
-        actions_info += "Based on your current situation, here are the most relevant actions you can take:\n\n"
-        
-        for i, action in enumerate(contextual_actions[:5], 1):
-            actions_info += f"{i}. **{action['action_type']}** (Priority: {action['priority']:.2f})\n"
-            actions_info += f"   - Reason: {action['reason']}\n"
-            actions_info += f"   - Context: {action['context_description']}\n"
-            if action['parameters']:
-                actions_info += f"   - Suggested parameters: {action['parameters']}\n"
-            actions_info += "\n"
-        
-        actions_info += "\nChoose ONE action that best fits your personality, current state, and situation.\n"
-        actions_info += "Your decision should be based on your traits, relationships, and immediate needs.\n"
+        # Add comprehensive action analysis with role-specific styling
+        if agent.role.value == "Guard":
+            actions_info = "\n\n## TACTICAL ACTION MATRIX\n"
+            actions_info += "**AVAILABLE ACTIONS WITH SITUATIONAL ANALYSIS:**\n\n"
+            
+            # Get all possible actions and mark which ones are contextually relevant
+            all_actions = ['do_nothing', 'move', 'speak', 'attack', 'use_item']
+            contextual_action_names = [action['action_type'] for action in contextual_actions]
+            
+            for action_name in all_actions:
+                # Find if this action is in contextual recommendations
+                contextual_action = next((a for a in contextual_actions if a['action_type'] == action_name), None)
+                
+                if contextual_action:
+                    # High relevance action
+                    priority = contextual_action['priority']
+                    recommendation = "🔥 HIGHLY RELEVANT" if priority > 0.7 else "⚡ RELEVANT" if priority > 0.4 else "✓ AVAILABLE"
+                    actions_info += f"• **{action_name}** - {recommendation} (Algorithm Priority: {priority:.2f})\n"
+                    actions_info += f"  └ Tactical Reason: {contextual_action['reason']}\n"
+                    actions_info += f"  └ Context: {contextual_action['context_description']}\n"
+                    if contextual_action['parameters']:
+                        actions_info += f"  └ Suggested Parameters: {contextual_action['parameters']}\n"
+                else:
+                    # Standard action without specific context
+                    actions_info += f"• **{action_name}** - ⚪ STANDARD OPTION (No specific context)\n"
+                actions_info += "\n"
+            
+            actions_info += "**DECISION GUIDANCE:**\n"
+            actions_info += "• The Priority scores are algorithmic calculations - you have complete autonomy to make your own tactical judgment\n"
+            actions_info += "• Base your decision on your personality traits, current mental/physical state, and tactical situation\n"
+            actions_info += "• Consider both immediate tactical advantage and long-term strategic control\n\n"
+        else:
+            # Prisoner-specific action matrix with survival focus
+            actions_info = "\n\n## SURVIVAL OPTIONS ASSESSMENT\n"
+            actions_info += "**AVAILABLE ACTIONS WITH RISK/BENEFIT ANALYSIS:**\n\n"
+            
+            # Get all possible actions and mark which ones are contextually relevant
+            all_actions = ['do_nothing', 'move', 'speak', 'attack', 'use_item']
+            contextual_action_names = [action['action_type'] for action in contextual_actions]
+            
+            for action_name in all_actions:
+                # Find if this action is in contextual recommendations
+                contextual_action = next((a for a in contextual_actions if a['action_type'] == action_name), None)
+                
+                if contextual_action:
+                    # High relevance action with survival-focused indicators
+                    priority = contextual_action['priority']
+                    recommendation = "🆘 CRITICAL NEED" if priority > 0.7 else "⚠️ IMPORTANT" if priority > 0.4 else "💭 CONSIDER"
+                    actions_info += f"• **{action_name}** - {recommendation} (Survival Priority: {priority:.2f})\n"
+                    actions_info += f"  └ Why This Matters: {contextual_action['reason']}\n"
+                    actions_info += f"  └ Situation: {contextual_action['context_description']}\n"
+                    if contextual_action['parameters']:
+                        actions_info += f"  └ How To Do It: {contextual_action['parameters']}\n"
+                else:
+                    # Standard action without specific context
+                    actions_info += f"• **{action_name}** - 🔘 ALWAYS AVAILABLE (No urgent need detected)\n"
+                actions_info += "\n"
+            
+            actions_info += "**SURVIVAL GUIDANCE:**\n"
+            actions_info += "• The Priority scores are just suggestions - trust your instincts and fear when making decisions\n"
+            actions_info += "• Consider your personality, current desperation level, and immediate survival needs\n"
+            actions_info += "• Sometimes the 'safest' choice isn't always the right one for your situation\n\n"
         
         return base_prompt + actions_info
     
@@ -1535,10 +1589,27 @@ Available actions: do_nothing, move, speak, attack, use_item
                 
                 print(f"DEBUG: LLM response content for {agent.name}: {message_content[:200]}...")
                 
-                if message_content and "<Thinking>" in message_content and "</Thinking>" in message_content:
-                    thinking_start = message_content.find("<Thinking>") + 10
-                    thinking_end = message_content.find("</Thinking>")
-                    thinking = message_content[thinking_start:thinking_end].strip()
+                # Check for both uppercase and lowercase thinking tags (handle multiline)
+                thinking_found = False
+                import re
+                
+                # Try uppercase first
+                thinking_pattern = r'<Thinking>(.*?)</Thinking>'
+                thinking_match = re.search(thinking_pattern, message_content, re.DOTALL | re.IGNORECASE)
+                
+                if thinking_match:
+                    thinking = thinking_match.group(1).strip()
+                    thinking_found = True
+                else:
+                    # Try lowercase
+                    thinking_pattern = r'<thinking>(.*?)</thinking>'
+                    thinking_match = re.search(thinking_pattern, message_content, re.DOTALL | re.IGNORECASE)
+                    
+                    if thinking_match:
+                        thinking = thinking_match.group(1).strip()
+                        thinking_found = True
+                
+                if thinking_found:
                     
                     print(f"DEBUG: Extracted thinking for {agent.name}: {thinking[:100]}...")
                     

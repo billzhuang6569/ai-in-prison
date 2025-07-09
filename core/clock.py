@@ -3,6 +3,7 @@ Time management system for Project Prometheus
 """
 
 from models.schemas import WorldState
+from database.event_logger import event_logger
 import json
 
 class TimeController:
@@ -114,3 +115,18 @@ class TimeController:
         # Death state
         if agent.hp <= 0:
             agent.status_tags.append("deceased")
+            
+            # Record death event for milestones
+            if world_state.session_id:
+                event_logger.log_event(
+                    session_id=world_state.session_id,
+                    day=world_state.day,
+                    hour=world_state.hour,
+                    minute=world_state.minute,
+                    agent_id=agent.agent_id,
+                    agent_name=agent.name,
+                    event_type="death",
+                    description=f"{agent.name} has died from hunger, thirst, or injuries",
+                    details=f'{{"hp": {agent.hp}, "hunger": {agent.hunger}, "thirst": {agent.thirst}}}'
+                )
+                world_state.event_log.append(f"💀 {agent.name} has died")

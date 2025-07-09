@@ -401,9 +401,13 @@ class BehaviorFilter:
             reasons.append("I'm dying of thirst")
         
         # 检查关系
+        def get_relationship_score(agent, other_agent_id):
+            relationship = agent.relationships.get(other_agent_id)
+            return relationship.score if relationship else 50
+            
         hostile_targets = [
             other for other in context.nearby_agents
-            if (agent.relationships.get(other.agent_id).score if agent.relationships.get(other.agent_id) else 50) < 30
+            if get_relationship_score(agent, other.agent_id) < 30
         ]
         
         if hostile_targets:
@@ -476,8 +480,11 @@ class BehaviorFilter:
         
         if action_type == ActionEnum.ATTACK and context.nearby_agents:
             # 选择关系最差的目标
-            target = min(context.nearby_agents, 
-                        key=lambda x: context.agent.relationships.get(x.agent_id, {"score": 50}).get("score", 50))
+            def get_relationship_score(agent_id):
+                relationship = context.agent.relationships.get(agent_id)
+                return relationship.score if relationship else 50
+                
+            target = min(context.nearby_agents, key=lambda x: get_relationship_score(x.agent_id))
             params["target_id"] = target.agent_id
             params["reason"] = self._get_attack_reason(context)
         

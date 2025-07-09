@@ -30,7 +30,8 @@ function ExperimentControl() {
     { id: 'openrouter/cypher-alpha:free', name: 'Cypher Alpha (免费)', cost: '免费' },
     { id: 'deepseek/deepseek-r1-0528-qwen3-8b:free', name: 'DeepSeek R1 Qwen3 8B (免费)', cost: '免费' },
     { id: 'deepseek/deepseek-r1-0528:free', name: 'DeepSeek R1 (免费)', cost: '免费' },
-    { id: 'qwen/qwen3-32b:free', name: 'Qwen3 32B (免费)', cost: '免费' }
+    { id: 'deepseek/deepseek-chat-v3-0324:free', name: 'DeepSeek Chat V3 (免费)', cost: '免费' },
+    { id: 'mistralai/devstral-small:free', name: 'Mistral Devstral Small (免费)', cost: '免费' }
   ]);
   
   // Load available sessions
