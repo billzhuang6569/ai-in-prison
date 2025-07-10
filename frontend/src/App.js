@@ -11,6 +11,8 @@ import AgentCards from './components/AgentCards';
 import AgentDetails from './components/AgentDetails';
 import Header from './components/Header';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
+import RuleManagementPanel from './components/RuleManagementPanel';
+import RuleStatusIndicator from './components/RuleStatusIndicator';
 import ItemToolbar from './components/ItemToolbar';
 import ExperimentMilestones from './components/ExperimentMilestones';
 import './App.css';
@@ -18,19 +20,25 @@ import './App.css';
 function App() {
   const { connect, disconnect, isConnected, worldState } = useWorldStore();
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [showRuleManagement, setShowRuleManagement] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   
-  // Handle ESC key to close modal
+  // Handle ESC key to close modals
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && showSessionHistory) {
-        setShowSessionHistory(false);
+      if (event.key === 'Escape') {
+        if (showSessionHistory) {
+          setShowSessionHistory(false);
+        }
+        if (showRuleManagement) {
+          setShowRuleManagement(false);
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showSessionHistory]);
+  }, [showSessionHistory, showRuleManagement]);
   
   useEffect(() => {
     // Suppress ResizeObserver errors
@@ -54,7 +62,10 @@ function App() {
   
   return (
     <div className="App">
-      <Header onSessionHistoryClick={() => setShowSessionHistory(true)} />
+      <Header 
+        onSessionHistoryClick={() => setShowSessionHistory(true)} 
+        onRuleManagementClick={() => setShowRuleManagement(true)}
+      />
       
       {/* Session History Modal */}
       {showSessionHistory && (
@@ -114,6 +125,31 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Rule Management Modal */}
+      {showRuleManagement && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRuleManagement(false);
+            }
+          }}
+        >
+          <RuleManagementPanel onClose={() => setShowRuleManagement(false)} />
+        </div>
+      )}
       
       <div className="main-content">
         {/* Left Column */}
@@ -169,6 +205,9 @@ function App() {
       
       {/* Experiment Milestones */}
       <ExperimentMilestones />
+      
+      {/* Rule Status Indicator - 实时规则状态指示器 */}
+      <RuleStatusIndicator onClick={() => setShowRuleManagement(true)} />
     </div>
   );
 }

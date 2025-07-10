@@ -24,6 +24,15 @@ class TimeController:
             world_state.day += 1
             world_state.event_log.append(f"--- Day {world_state.day} begins ---")
         
+        # Execute rule engine before status changes
+        try:
+            from core.rule_engine import rule_engine
+            rule_events = rule_engine.execute_rules(world_state)
+            world_state.event_log.extend(rule_events)
+        except Exception as e:
+            print(f"Rule engine error: {e}")
+            world_state.event_log.append(f"⚠️ Rule engine error: {str(e)}")
+        
         # Apply hourly status changes to all agents
         for agent in world_state.agents.values():
             self._apply_hourly_changes(agent)

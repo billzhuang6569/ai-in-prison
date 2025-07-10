@@ -16,6 +16,13 @@ from core.session_manager import session_manager
 
 router = APIRouter()
 
+# Include rule management routes
+try:
+    from api.rule_management import router as rule_router
+    router.include_router(rule_router)
+except ImportError as e:
+    print(f"Warning: Rule management API not available: {e}")
+
 class ExperimentConfig(BaseModel):
     """Configuration for starting an experiment"""
     duration_days: int = 14

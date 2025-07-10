@@ -24,5 +24,40 @@
     "default_relationship_score": 50,
     "map_size": [9, 16],
     "initial_agent_count": 6
+  },
+  "rule_engine": {
+    "enabled": true,
+    "execution_order": ["temporal", "resource", "behavior", "environmental", "social"],
+    "max_rules_per_turn": 10,
+    "debug_mode": false
+  },
+  "food_distribution_rules": {
+    "guard_automatic_supply": {
+      "enabled": true,
+      "schedule": [8, 12, 16, 20],
+      "food_per_guard": 2,
+      "water_per_guard": 2,
+      "priority": 8
+    },
+    "cafeteria_supply": {
+      "enabled": true,
+      "meal_schedule": {
+        "7": {"food_count": 8, "water_count": 6, "meal_type": "breakfast"},
+        "12": {"food_count": 10, "water_count": 8, "meal_type": "lunch"},
+        "15": {"food_count": 4, "water_count": 3, "meal_type": "snack"},
+        "18": {"food_count": 10, "water_count": 8, "meal_type": "dinner"},
+        "21": {"food_count": 3, "water_count": 2, "meal_type": "late_snack"}
+      },
+      "scarcity_factor": 0.8,
+      "competition_enabled": true,
+      "priority": 9
+    },
+    "scarcity_management": {
+      "enabled": true,
+      "high_demand_threshold": 3,
+      "competition_boost": 1.5,
+      "hoarding_prevention": true,
+      "priority": 6
+    }
   }
 }

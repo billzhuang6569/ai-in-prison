@@ -4,7 +4,7 @@
 import React from 'react';
 import useWorldStore from '../store/worldStore';
 
-function Header({ onSessionHistoryClick }) {
+function Header({ onSessionHistoryClick, onRuleManagementClick }) {
   const { worldState } = useWorldStore();
   
   return (
@@ -39,6 +39,25 @@ function Header({ onSessionHistoryClick }) {
           title="查看和管理历史会话"
         >
           📚 历史会话
+        </button>
+        
+        <button
+          onClick={onRuleManagementClick}
+          style={{
+            padding: '6px 12px',
+            backgroundColor: '#FF9800',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+          title="管理实验规则和配置"
+        >
+          🔧 规则管理
         </button>
         
         {worldState && (
