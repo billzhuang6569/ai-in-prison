@@ -103,8 +103,8 @@ class GuardFoodDistributionRule(TemporalRule):
             for i in range(self.distribution_config["food_per_guard"]):
                 food_item = Item(
                     item_id=f"guard_food_{guard.agent_id}_{world_state.day}_{world_state.hour}_{i}",
-                    name="Guard Ration",
-                    description="Official guard food ration",
+                    name="Food",
+                    description="Prison meal",
                     item_type=ItemEnum.FOOD
                 )
                 guard.inventory.append(food_item)
@@ -113,16 +113,16 @@ class GuardFoodDistributionRule(TemporalRule):
             for i in range(self.distribution_config["water_per_guard"]):
                 water_item = Item(
                     item_id=f"guard_water_{guard.agent_id}_{world_state.day}_{world_state.hour}_{i}",
-                    name="Guard Water",
-                    description="Official guard water ration",
+                    name="Water",
+                    description="Clean drinking water",
                     item_type=ItemEnum.WATER
                 )
                 guard.inventory.append(water_item)
             
             # 添加到记忆
-            guard.memory["episodic"].append(f"Received official food and water ration at {world_state.hour}:00")
+            guard.memory["episodic"].append(f"Received food and water at {world_state.hour}:00")
             
-            events.append(f"🍽️ [RULE] Guard {guard.name} received automatic food ration")
+            events.append(f"🍽️ [RULE] Guard {guard.name} received automatic food and water")
         
         return events
     
@@ -190,8 +190,8 @@ class CafeteriaFoodSupplyRule(TemporalRule):
             for i in range(actual_food_count):
                 food_item = Item(
                     item_id=f"cafeteria_food_{current_hour}_{world_state.day}_{i}",
-                    name=f"{meal_type.title()} Meal",
-                    description=f"Cafeteria {meal_type} - limited availability",
+                    name="Food",
+                    description=f"Prison meal - limited availability",
                     item_type=ItemEnum.FOOD
                 )
                 new_items.append(food_item)
@@ -199,8 +199,8 @@ class CafeteriaFoodSupplyRule(TemporalRule):
             for i in range(actual_water_count):
                 water_item = Item(
                     item_id=f"cafeteria_water_{current_hour}_{world_state.day}_{i}",
-                    name=f"Drinking Water",
-                    description=f"Fresh water for {meal_type}",
+                    name="Water",
+                    description="Clean drinking water",
                     item_type=ItemEnum.WATER
                 )
                 new_items.append(water_item)

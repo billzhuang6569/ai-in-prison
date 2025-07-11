@@ -161,17 +161,21 @@ class BehaviorFilter:
         elif agent.hp < 60:
             priority += 0.4
         
-        # 饥饿程度
+        # 饥饿程度 - 更积极的使用策略
         if agent.hunger > 80:
-            priority += 0.9
+            priority += 0.95  # 非常紧急
         elif agent.hunger > 60:
-            priority += 0.5
+            priority += 0.7   # 提高优先级
+        elif agent.hunger > 40:
+            priority += 0.4   # 新增：提早开始关注
         
-        # 口渴程度
+        # 口渴程度 - 更积极的使用策略
         if agent.thirst > 80:
-            priority += 0.9
+            priority += 0.95  # 非常紧急
         elif agent.thirst > 60:
-            priority += 0.5
+            priority += 0.7   # 提高优先级
+        elif agent.thirst > 40:
+            priority += 0.4   # 新增：提早开始关注
         
         # 精神状态
         if agent.sanity < 20:
@@ -180,8 +184,9 @@ class BehaviorFilter:
             priority += 0.3
         
         # 检查是否有相关物品
+        from models.enums import ItemEnum
         has_relevant_item = any(
-            item.item_type.value in ["food", "water", "first_aid"]
+            item.item_type in [ItemEnum.FOOD, ItemEnum.WATER, ItemEnum.FIRST_AID]
             for item in agent.inventory
         )
         
@@ -287,12 +292,13 @@ class BehaviorFilter:
         agent = context.agent
         priority = 0.0
         
+        from models.enums import ItemEnum
         for item in context.nearby_items:
-            if item.item_type.value == "food" and agent.hunger > 50:
+            if item.item_type == ItemEnum.FOOD and agent.hunger > 50:
                 priority += 0.6
-            elif item.item_type.value == "water" and agent.thirst > 50:
+            elif item.item_type == ItemEnum.WATER and agent.thirst > 50:
                 priority += 0.6
-            elif item.item_type.value == "first_aid" and agent.hp < 70:
+            elif item.item_type == ItemEnum.FIRST_AID and agent.hp < 70:
                 priority += 0.4
             else:
                 priority += 0.2
@@ -442,11 +448,11 @@ class BehaviorFilter:
     
     def _get_use_item_reason(self, context: BehaviorContext) -> str:
         """获取使用物品的具体原因"""
-        if context.agent.hp < 50:
+        if context.agent.hp < 70:
             return "I need to heal my wounds"
-        elif context.agent.hunger > 70:
+        elif context.agent.hunger > 50:
             return "I need to eat something"
-        elif context.agent.thirst > 70:
+        elif context.agent.thirst > 50:
             return "I need to drink something"
         else:
             return "This item might be useful"
@@ -505,14 +511,15 @@ class BehaviorFilter:
             params["message"] = "Let me talk to you"
         
         elif action_type == ActionEnum.USE_ITEM and context.agent.inventory:
-            # 选择最需要的物品
+            # 选择最需要的物品 - 降低使用阈值，更早使用道具
+            from models.enums import ItemEnum
             best_item = None
-            if context.agent.hunger > 70:
-                best_item = next((item for item in context.agent.inventory if item.item_type.value == "food"), None)
-            elif context.agent.thirst > 70:
-                best_item = next((item for item in context.agent.inventory if item.item_type.value == "water"), None)
-            elif context.agent.hp < 50:
-                best_item = next((item for item in context.agent.inventory if item.item_type.value == "first_aid"), None)
+            if context.agent.hunger > 50:  # 降低阈值从70到50
+                best_item = next((item for item in context.agent.inventory if item.item_type == ItemEnum.FOOD), None)
+            elif context.agent.thirst > 50:  # 降低阈值从70到50  
+                best_item = next((item for item in context.agent.inventory if item.item_type == ItemEnum.WATER), None)
+            elif context.agent.hp < 70:  # 提高阈值从50到70，更早使用急救包
+                best_item = next((item for item in context.agent.inventory if item.item_type == ItemEnum.FIRST_AID), None)
             
             if best_item:
                 params["item_id"] = best_item.item_id

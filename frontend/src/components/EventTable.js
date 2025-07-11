@@ -69,7 +69,19 @@ function EventTable() {
       timeGroups[timeKey].agents[event.agent_name].push({
         description: event.description,
         event_type: event.event_type,
-        timestamp: event.timestamp
+        timestamp: event.timestamp,
+        id: event.id // Add ID for sorting
+      });
+    });
+    
+    // Process each time group to keep only the most recent event per agent
+    Object.values(timeGroups).forEach(timeGroup => {
+      Object.keys(timeGroup.agents).forEach(agentName => {
+        const agentEvents = timeGroup.agents[agentName];
+        
+        // Sort events by ID (latest first) and keep only the most recent one
+        agentEvents.sort((a, b) => (b.id || 0) - (a.id || 0));
+        timeGroup.agents[agentName] = [agentEvents[0]]; // Keep only the most recent event
       });
     });
     
@@ -94,6 +106,27 @@ function EventTable() {
     };
   }, [isRunning, currentPage, worldState?.session_id]);
 
+  // Listen for new experiment started event
+  useEffect(() => {
+    const handleExperimentStarted = () => {
+      // Clear current events
+      setRecentEvents([]);
+      setTotalEvents(0);
+      setCurrentPage(0);
+      
+      // Wait a moment then reload events from new session
+      setTimeout(() => {
+        loadEvents(0);
+      }, 1000);
+    };
+
+    window.addEventListener('experimentStarted', handleExperimentStarted);
+    
+    return () => {
+      window.removeEventListener('experimentStarted', handleExperimentStarted);
+    };
+  }, []);
+
   // Set current session as selected when available
   useEffect(() => {
     if (worldState?.session_id && !selectedSession) {
@@ -104,7 +137,28 @@ function EventTable() {
   // Get unique agent names for columns
   const getAgentNames = () => {
     if (!worldState?.agents) return [];
-    return Object.values(worldState.agents).map(agent => agent.name).sort();
+    
+    // Sort agents by correct turn order: Guards first, then Prisoners, in numerical order
+    return Object.values(worldState.agents)
+      .map(agent => agent.name)
+      .sort((a, b) => {
+        // Extract role and number from names like "Guard 1", "Prisoner 2"
+        const parseAgent = (name) => {
+          const match = name.match(/^(Guard|Prisoner)\s+(\d+)$/);
+          return match ? { role: match[1], num: parseInt(match[2]) } : { role: 'Other', num: 0 };
+        };
+        
+        const agentA = parseAgent(a);
+        const agentB = parseAgent(b);
+        
+        // Guards before Prisoners
+        if (agentA.role !== agentB.role) {
+          return agentA.role === 'Guard' ? -1 : 1;
+        }
+        
+        // Within same role, sort by number
+        return agentA.num - agentB.num;
+      });
   };
 
   const getEventTypeColor = (type) => {

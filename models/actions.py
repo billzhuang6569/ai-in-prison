@@ -54,7 +54,7 @@ class DoNothingAction(BaseAction):
         )
         
         world_state.event_log.append(f"{agent.name} rests and observes.")
-        return ActionResult(success=True, message="Agent rests", world_state_changed=True)
+        return ActionResult(success=True, message="Agent rests", world_state_changed=True, action_type="do_nothing")
 
 class MoveAction(BaseAction):
     def __init__(self):
@@ -176,7 +176,7 @@ class MoveAction(BaseAction):
         )
         
         world_state.event_log.append(f"{agent.name} moves to ({target_x}, {target_y})")
-        return ActionResult(success=True, message="Agent moved", world_state_changed=True)
+        return ActionResult(success=True, message="Agent moved", world_state_changed=True, action_type="move")
 
 class SpeakAction(BaseAction):
     def __init__(self):
@@ -221,7 +221,7 @@ class SpeakAction(BaseAction):
         )
         
         world_state.event_log.append(f"{agent.name} says to {target_agent.name}: '{message}'")
-        return ActionResult(success=True, message="Agent spoke", world_state_changed=True)
+        return ActionResult(success=True, message="Agent spoke", world_state_changed=True, action_type="speak")
 
 class AttackAction(BaseAction):
     def __init__(self):
@@ -291,7 +291,7 @@ class AttackAction(BaseAction):
         
         world_state.event_log.append(f"{agent.name} attacks {target_agent.name} for {damage} damage! Reason: {reason}")
         
-        return ActionResult(success=True, message="Attack executed", world_state_changed=True)
+        return ActionResult(success=True, message="Attack executed", world_state_changed=True, action_type="attack")
 
 class UseItemAction(BaseAction):
     def __init__(self):
@@ -346,7 +346,7 @@ class UseItemAction(BaseAction):
         
         world_state.event_log.append(message)
         
-        return ActionResult(success=True, message="Item used", world_state_changed=True)
+        return ActionResult(success=True, message="Item used", world_state_changed=True, action_type="use_item")
 
 
 class GiveItemAction(BaseAction):

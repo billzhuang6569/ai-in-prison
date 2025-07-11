@@ -199,23 +199,46 @@
   background-color: #111;
 }
 
+.map-container-enhanced {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  padding: 20px;
+  min-height: 100%;
+  position: relative;
+  contain: layout;
+  will-change: auto;
+}
+
 .map-grid {
   display: grid;
   gap: 1px;
   background-color: #333;
-  border: 2px solid #555;
+  border: 3px solid #4a6741;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
 }
 
 .map-cell {
-  width: 30px;
-  height: 30px;
+  width: 45px;
+  height: 45px;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: bold;
   cursor: pointer;
   position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.map-cell:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .map-cell.Cell_Block {
@@ -240,28 +263,48 @@
 
 .agent-marker {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: 14px;
   font-weight: bold;
   color: white;
-  text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  transition: all 0.3s ease;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.agent-marker:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
 }
 
 .agent-marker.Guard {
-  background-color: #0066cc;
+  background: linear-gradient(135deg, #3498db, #2980b9);
 }
 
 .agent-marker.Prisoner {
-  background-color: #cc6600;
+  background: linear-gradient(135deg, #f39c12, #d68910);
 }
 
 .agent-marker.selected {
-  box-shadow: 0 0 8px #fff;
+  box-shadow: 0 0 15px #f1c40f, 0 4px 8px rgba(0, 0, 0, 0.3);
+  border-color: #f1c40f;
+  animation: selectedPulse 2s ease-in-out infinite;
+}
+
+@keyframes selectedPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px #f1c40f, 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px #f1c40f, 0 6px 12px rgba(0, 0, 0, 0.4);
+  }
 }
 
 /* Event log styles */

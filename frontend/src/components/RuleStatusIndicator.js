@@ -14,7 +14,7 @@ function RuleStatusIndicator({ onClick }) {
   // 获取规则状态
   const fetchRuleStatus = async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/status`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/status`);
       const data = await response.json();
       if (data.success) {
         setRuleStatus(data.data);
@@ -27,7 +27,7 @@ function RuleStatusIndicator({ onClick }) {
   // 获取最近的规则执行事件
   const fetchRecentEvents = async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/history?limit=5`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/history?limit=5`);
       const data = await response.json();
       if (data.success) {
         setRecentEvents(data.data.history);
@@ -136,7 +136,7 @@ function RuleStatusIndicator({ onClick }) {
         .rule-status-indicator {
           position: fixed;
           bottom: 20px;
-          right: 20px;
+          right: 100px;
           background: #007bff;
           color: white;
           padding: 8px 12px;
@@ -169,7 +169,7 @@ function RuleStatusIndicator({ onClick }) {
         .rule-status-popup {
           position: fixed;
           bottom: 70px;
-          right: 20px;
+          right: 100px;
           background: white;
           border: 1px solid #ccc;
           border-radius: 8px;

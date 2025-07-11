@@ -129,11 +129,16 @@ class GameEngine:
             active_agents_this_turn += 1
             
             # Agent takes actions until AP is exhausted
+            turn_actions_taken = []  # Track actions taken this turn
             while agent.action_points > 0:
-                action_result = await self._execute_agent_action(agent_id)
+                action_result = await self._execute_agent_action(agent_id, turn_actions_taken)
                 if not action_result.success:
                     break  # If action fails, skip remaining actions
                     
+                # Track the action taken this turn
+                if hasattr(action_result, 'action_type'):
+                    turn_actions_taken.append(action_result.action_type)
+                
                 # Check if this was a real action (not just an LLM failure)
                 if "LLM ERROR" not in action_result.message:
                     successful_actions_this_turn += 1
@@ -153,14 +158,16 @@ class GameEngine:
         # Phase 3: Broadcast updated state
         await self._broadcast_state()
     
-    async def _execute_agent_action(self, agent_id: str) -> ActionResult:
+    async def _execute_agent_action(self, agent_id: str, turn_actions_taken: list = None) -> ActionResult:
         """Execute a single agent action using LLM or fallback to random"""
         agent = self.world.state.agents[agent_id]
+        if turn_actions_taken is None:
+            turn_actions_taken = []
         
         # Try to get LLM decision first
         if self.llm_service.is_available():
             try:
-                llm_decision = await self.llm_service.get_agent_decision(agent, self.world.state)
+                llm_decision = await self.llm_service.get_agent_decision(agent, self.world.state, turn_actions_taken)
                 
                 if llm_decision:
                     action_type = llm_decision["action_type"]

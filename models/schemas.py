@@ -112,3 +112,4 @@ class ActionResult(BaseModel):
     success: bool
     message: str
     world_state_changed: bool = False
+    action_type: Optional[str] = None  # Track what action was performed

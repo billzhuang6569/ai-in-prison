@@ -16,6 +16,7 @@ const useWorldStore = create((set, get) => ({
   setWorldState: (worldState) => set({ worldState }),
   setConnected: (isConnected) => set({ isConnected }),
   setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  clearWorldState: () => set({ worldState: null, selectedAgent: null }),
   
   // Connect to WebSocket
   connect: () => {

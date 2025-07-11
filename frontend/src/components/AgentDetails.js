@@ -7,7 +7,7 @@ import useWorldStore from '../store/worldStore';
 
 function AgentDetails() {
   const { worldState, selectedAgent } = useWorldStore();
-  const [detailView, setDetailView] = useState('thinking'); // 'thinking', 'prompt', 'memory', 'stats'
+  const [detailView, setDetailView] = useState('thinking'); // 'thinking', 'history', 'thoughts', 'shortterm', 'stats'
   const [agentPromptData, setAgentPromptData] = useState(null);
   const [loadingPromptData, setLoadingPromptData] = useState(false);
   const [agentMemoryData, setAgentMemoryData] = useState(null);
@@ -48,9 +48,9 @@ function AgentDetails() {
     loadPromptData();
   }, [selectedAgent, worldState?.session_id, worldState?.agent_prompts]);
 
-  // Load agent memory data when memory tab is selected
+  // Load agent memory data when memory-related tabs are selected
   useEffect(() => {
-    if (!selectedAgent || !worldState?.session_id || detailView !== 'memory') {
+    if (!selectedAgent || !worldState?.session_id || !['history', 'thoughts', 'shortterm'].includes(detailView)) {
       return;
     }
     
@@ -96,27 +96,32 @@ function AgentDetails() {
       {/* Detail View Tabs */}
       <div style={{ 
         display: 'flex', 
-        gap: '3px', 
+        gap: '2px', 
         marginBottom: '15px',
-        fontSize: '10px'
+        fontSize: '9px',
+        flexWrap: 'wrap'
       }}>
         {[
-          { key: 'thinking', label: '🧠 思考', icon: '🧠' },
-          { key: 'prompt', label: '📝 提示词', icon: '📝' },
-          { key: 'memory', label: '💭 记忆', icon: '💭' },
-          { key: 'stats', label: '📊 详细状态', icon: '📊' }
+          { key: 'thinking', label: '🧠 思考+提示词', icon: '🧠' },
+          { key: 'history', label: '📚 历史记忆', icon: '📚' },
+          { key: 'thoughts', label: '💭 思考历史', icon: '💭' },
+          { key: 'shortterm', label: '🔄 短期缓存', icon: '🔄' },
+          { key: 'stats', label: '📊 详细状态', icon: '📊' },
+          { key: 'inventory', label: '🎒 道具清单', icon: '🎒' }
         ].map(tab => (
           <button
             key={tab.key}
             onClick={() => setDetailView(tab.key)}
             style={{
-              padding: '4px 8px',
+              padding: '3px 6px',
               backgroundColor: detailView === tab.key ? '#007bff' : '#444',
               color: 'white',
               border: 'none',
               borderRadius: '3px',
-              fontSize: '10px',
-              cursor: 'pointer'
+              fontSize: '9px',
+              cursor: 'pointer',
+              flex: '1',
+              minWidth: '60px'
             }}
           >
             {tab.icon}
@@ -134,208 +139,241 @@ function AgentDetails() {
       }}>
         {detailView === 'thinking' && (
           <div>
-            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#4caf50' }}>🧠 最新思考过程</h3>
-            {loadingPromptData ? (
-              <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
-                ⏳ 加载中...
-              </div>
-            ) : agentPromptData?.thinking_process ? (
-              <div style={{ 
-                whiteSpace: 'pre-wrap', 
-                fontSize: '11px', 
-                lineHeight: '1.4',
-                color: '#ddd',
-                fontFamily: 'monospace'
-              }}>
-                {agentPromptData.thinking_process}
-              </div>
-            ) : selectedAgentData.last_thinking ? (
-              <div style={{ 
-                whiteSpace: 'pre-wrap', 
-                fontSize: '11px', 
-                lineHeight: '1.4',
-                color: '#ddd',
-                fontFamily: 'monospace'
-              }}>
-                {selectedAgentData.last_thinking}
-              </div>
-            ) : (
-              <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-                暂无思考记录
-              </div>
-            )}
-            
-            {agentPromptData?.timestamp && (
-              <div style={{ 
-                marginTop: '10px', 
-                fontSize: '9px', 
-                color: '#888',
-                borderTop: '1px solid #444',
-                paddingTop: '8px'
-              }}>
-                更新时间: {agentPromptData.timestamp}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {detailView === 'prompt' && (
-          <div>
-            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#ff9800' }}>📝 完整提示词</h3>
-            {loadingPromptData ? (
-              <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
-                ⏳ 加载中...
-              </div>
-            ) : agentPromptData?.prompt_content ? (
-              <div style={{ 
-                whiteSpace: 'pre-wrap', 
-                fontSize: '9px', 
-                lineHeight: '1.3',
-                color: '#ccc',
-                fontFamily: 'monospace',
-                backgroundColor: '#1a1a1a',
-                padding: '8px',
-                borderRadius: '3px',
-                border: '1px solid #444'
-              }}>
-                {agentPromptData.prompt_content}
-              </div>
-            ) : (
-              <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-                暂无提示词记录
-              </div>
-            )}
-            
-            {agentPromptData?.decision && (
-              <div style={{ marginTop: '10px' }}>
-                <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#4caf50' }}>🎯 AI决策结果:</h4>
-                <div style={{ 
-                  fontSize: '10px', 
-                  color: '#ddd',
-                  backgroundColor: '#1a1a1a',
-                  padding: '6px',
-                  borderRadius: '3px',
-                  border: '1px solid #444'
-                }}>
-                  {agentPromptData.decision}
+            {/* 思考过程部分 */}
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#4caf50' }}>🧠 最新思考过程</h3>
+              {loadingPromptData ? (
+                <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                  ⏳ 加载中...
                 </div>
-              </div>
-            )}
+              ) : agentPromptData?.thinking_process ? (
+                <div style={{ 
+                  whiteSpace: 'pre-wrap', 
+                  fontSize: '10px', 
+                  lineHeight: '1.4',
+                  color: '#ddd',
+                  fontFamily: 'monospace',
+                  backgroundColor: '#1a1a1a',
+                  padding: '8px',
+                  borderRadius: '3px',
+                  border: '1px solid #444',
+                  marginBottom: '10px'
+                }}>
+                  {agentPromptData.thinking_process}
+                </div>
+              ) : selectedAgentData.last_thinking ? (
+                <div style={{ 
+                  whiteSpace: 'pre-wrap', 
+                  fontSize: '10px', 
+                  lineHeight: '1.4',
+                  color: '#ddd',
+                  fontFamily: 'monospace',
+                  backgroundColor: '#1a1a1a',
+                  padding: '8px',
+                  borderRadius: '3px',
+                  border: '1px solid #444',
+                  marginBottom: '10px'
+                }}>
+                  {selectedAgentData.last_thinking}
+                </div>
+              ) : (
+                <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
+                  暂无思考记录
+                </div>
+              )}
+            </div>
+            
+            {/* 完整提示词部分 */}
+            <div>
+              <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#ff9800' }}>📝 完整提示词</h3>
+              {loadingPromptData ? (
+                <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                  ⏳ 加载中...
+                </div>
+              ) : agentPromptData?.prompt_content ? (
+                <div style={{ 
+                  whiteSpace: 'pre-wrap', 
+                  fontSize: '8px', 
+                  lineHeight: '1.3',
+                  color: '#ccc',
+                  fontFamily: 'monospace',
+                  backgroundColor: '#1a1a1a',
+                  padding: '8px',
+                  borderRadius: '3px',
+                  border: '1px solid #444',
+                  maxHeight: '200px',
+                  overflowY: 'auto'
+                }}>
+                  {agentPromptData.prompt_content}
+                </div>
+              ) : (
+                <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
+                  暂无提示词记录
+                </div>
+              )}
+              
+              {agentPromptData?.decision && (
+                <div style={{ marginTop: '10px' }}>
+                  <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#4caf50' }}>🎯 AI决策结果:</h4>
+                  <div style={{ 
+                    fontSize: '9px', 
+                    color: '#ddd',
+                    backgroundColor: '#1a1a1a',
+                    padding: '6px',
+                    borderRadius: '3px',
+                    border: '1px solid #444'
+                  }}>
+                    {agentPromptData.decision}
+                  </div>
+                </div>
+              )}
+              
+              {agentPromptData?.timestamp && (
+                <div style={{ 
+                  marginTop: '10px', 
+                  fontSize: '9px', 
+                  color: '#888',
+                  borderTop: '1px solid #444',
+                  paddingTop: '8px'
+                }}>
+                  更新时间: {agentPromptData.timestamp}
+                </div>
+              )}
+            </div>
           </div>
         )}
         
-        {detailView === 'memory' && (
+        {/* 历史记忆标签页 */}
+        {detailView === 'history' && (
           <div>
-            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#6f42c1' }}>💭 记忆系统</h3>
+            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#4caf50' }}>📚 完整历史记忆</h3>
             
             {loadingMemoryData ? (
               <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
                 ⏳ 加载记忆数据中...
               </div>
-            ) : agentMemoryData ? (
-              <div>
-                {/* Complete History with Timestamps */}
-                {agentMemoryData.timestamped_history?.length > 0 && (
-                  <div style={{ marginBottom: '15px' }}>
-                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#4caf50' }}>📚 完整历史记忆 (最新在上)</h4>
-                    <div style={{ 
-                      maxHeight: '250px', 
-                      overflowY: 'auto',
-                      fontSize: '9px',
+            ) : agentMemoryData?.timestamped_history?.length > 0 ? (
+              <div style={{ 
+                maxHeight: '320px', 
+                overflowY: 'auto',
+                fontSize: '9px'
+              }}>
+                {agentMemoryData.timestamped_history.map((entry, index) => (
+                  <div 
+                    key={index}
+                    style={{ 
+                      padding: '8px 10px', 
+                      margin: '0 0 8px 0',
                       backgroundColor: '#1a1a1a',
-                      borderRadius: '3px',
-                      border: '1px solid #444'
-                    }}>
-                      {agentMemoryData.timestamped_history.map((entry, index) => (
-                        <div 
-                          key={index}
-                          style={{ 
-                            padding: '6px 8px', 
-                            margin: '0',
-                            borderBottom: index < agentMemoryData.timestamped_history.length - 1 ? '1px solid #333' : 'none',
-                            borderLeft: `3px solid ${
-                              entry.event_type === 'combat' ? '#f44336' :
-                              entry.event_type === 'speech' ? '#2196f3' :
-                              entry.event_type === 'movement' ? '#4caf50' :
-                              '#6f42c1'
-                            }`
-                          }}
-                        >
-                          <div style={{ 
-                            color: '#888', 
-                            fontSize: '8px', 
-                            marginBottom: '2px',
-                            fontWeight: 'bold'
-                          }}>
-                            🕒 {entry.timestamp}
-                          </div>
-                          <div style={{ color: '#ddd', lineHeight: '1.3' }}>
-                            {entry.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Thinking History */}
-                {agentMemoryData.thinking_history?.length > 0 && (
-                  <div style={{ marginBottom: '15px' }}>
-                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#ff9800' }}>🧠 思考历史 (最近记录)</h4>
+                      borderRadius: '4px',
+                      border: '1px solid #444',
+                      borderLeft: `4px solid ${
+                        entry.event_type === 'combat' ? '#f44336' :
+                        entry.event_type === 'speech' ? '#2196f3' :
+                        entry.event_type === 'movement' ? '#4caf50' :
+                        '#6f42c1'
+                      }`
+                    }}
+                  >
                     <div style={{ 
-                      maxHeight: '120px', 
-                      overflowY: 'auto',
-                      fontSize: '9px',
-                      backgroundColor: '#1a1a1a',
-                      borderRadius: '3px',
-                      border: '1px solid #444'
+                      color: '#888', 
+                      fontSize: '8px', 
+                      marginBottom: '4px',
+                      fontWeight: 'bold'
                     }}>
-                      {agentMemoryData.thinking_history.slice(-5).reverse().map((thinking, index) => (
-                        <div 
-                          key={index}
-                          style={{ 
-                            padding: '6px 8px', 
-                            margin: '0',
-                            borderBottom: index < Math.min(agentMemoryData.thinking_history.length, 5) - 1 ? '1px solid #333' : 'none',
-                            borderLeft: '3px solid #ff9800'
-                          }}
-                        >
-                          <div style={{ color: '#ddd', lineHeight: '1.3', whiteSpace: 'pre-wrap' }}>
-                            {thinking}
-                          </div>
-                        </div>
-                      ))}
+                      🕒 {entry.timestamp}
+                    </div>
+                    <div style={{ color: '#ddd', lineHeight: '1.4' }}>
+                      {entry.content}
                     </div>
                   </div>
-                )}
-                
-                {/* Short-term Memory */}
-                {agentMemoryData.enhanced_memory?.short_term?.length > 0 && (
-                  <div style={{ marginBottom: '15px' }}>
-                    <h4 style={{ fontSize: '11px', margin: '0 0 5px 0', color: '#17a2b8' }}>🔄 短期记忆缓存</h4>
-                    <div style={{ fontSize: '9px' }}>
-                      {agentMemoryData.enhanced_memory.short_term.map((memory, index) => (
-                        <div 
-                          key={index}
-                          style={{ 
-                            padding: '4px 6px', 
-                            margin: '2px 0',
-                            backgroundColor: '#333',
-                            borderRadius: '3px',
-                            borderLeft: '3px solid #17a2b8',
-                            fontSize: '9px'
-                          }}
-                        >
-                          {memory}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
             ) : (
               <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-                暂无记忆数据
+                暂无历史记忆数据
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* 思考历史标签页 */}
+        {detailView === 'thoughts' && (
+          <div>
+            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#ff9800' }}>💭 思考历史</h3>
+            
+            {loadingMemoryData ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                ⏳ 加载记忆数据中...
+              </div>
+            ) : agentMemoryData?.thinking_history?.length > 0 ? (
+              <div style={{ 
+                maxHeight: '320px', 
+                overflowY: 'auto',
+                fontSize: '9px'
+              }}>
+                {agentMemoryData.thinking_history.slice(-10).reverse().map((thinking, index) => (
+                  <div 
+                    key={index}
+                    style={{ 
+                      padding: '8px 10px', 
+                      margin: '0 0 8px 0',
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '4px',
+                      border: '1px solid #444',
+                      borderLeft: '4px solid #ff9800'
+                    }}
+                  >
+                    <div style={{ color: '#ddd', lineHeight: '1.4', whiteSpace: 'pre-wrap' }}>
+                      {thinking}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
+                暂无思考历史数据
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* 短期记忆缓存标签页 */}
+        {detailView === 'shortterm' && (
+          <div>
+            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#17a2b8' }}>🔄 短期记忆缓存</h3>
+            
+            {loadingMemoryData ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                ⏳ 加载记忆数据中...
+              </div>
+            ) : agentMemoryData?.enhanced_memory?.short_term?.length > 0 ? (
+              <div style={{ 
+                maxHeight: '320px', 
+                overflowY: 'auto',
+                fontSize: '9px'
+              }}>
+                {agentMemoryData.enhanced_memory.short_term.map((memory, index) => (
+                  <div 
+                    key={index}
+                    style={{ 
+                      padding: '8px 10px', 
+                      margin: '0 0 8px 0',
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '4px',
+                      border: '1px solid #444',
+                      borderLeft: '4px solid #17a2b8'
+                    }}
+                  >
+                    <div style={{ color: '#ddd', lineHeight: '1.4' }}>
+                      {memory}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
+                暂无短期记忆数据
               </div>
             )}
           </div>
@@ -442,6 +480,138 @@ function AgentDetails() {
                   borderRadius: '3px'
                 }}>
                   {selectedAgentData.dynamic_goals.current_goal}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {detailView === 'inventory' && (
+          <div>
+            <h3 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#4caf50' }}>🎒 完整道具清单</h3>
+            
+            {selectedAgentData.inventory && selectedAgentData.inventory.length > 0 ? (
+              <div>
+                <div style={{ 
+                  marginBottom: '10px', 
+                  fontSize: '10px', 
+                  color: '#888',
+                  backgroundColor: '#2a2a2a',
+                  padding: '5px 8px',
+                  borderRadius: '3px'
+                }}>
+                  📦 总计 {selectedAgentData.inventory.length} 件道具
+                </div>
+                
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {selectedAgentData.inventory.map((item, index) => (
+                    <div 
+                      key={`${item.item_id}-${index}`}
+                      style={{
+                        backgroundColor: '#1a1a1a',
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        padding: '8px',
+                        transition: 'border-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.borderColor = '#666';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.borderColor = '#444';
+                      }}
+                    >
+                      {/* 道具头部信息 */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        marginBottom: '4px'
+                      }}>
+                        <div style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 'bold', 
+                          color: '#fff'
+                        }}>
+                          📦 {item.name || '未知道具'}
+                        </div>
+                        <div style={{ 
+                          fontSize: '8px', 
+                          color: '#888',
+                          backgroundColor: '#333',
+                          padding: '1px 4px',
+                          borderRadius: '2px'
+                        }}>
+                          {item.item_type || 'unknown'}
+                        </div>
+                      </div>
+                      
+                      {/* 道具描述 */}
+                      {item.description && (
+                        <div style={{
+                          fontSize: '9px',
+                          color: '#ccc',
+                          lineHeight: '1.3',
+                          marginBottom: '4px'
+                        }}>
+                          {item.description}
+                        </div>
+                      )}
+                      
+                      {/* 道具ID */}
+                      <div style={{
+                        fontSize: '8px',
+                        color: '#666',
+                        fontFamily: 'monospace'
+                      }}>
+                        ID: {item.item_id}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* 道具统计信息 */}
+                <div style={{ 
+                  marginTop: '15px',
+                  fontSize: '10px',
+                  color: '#888'
+                }}>
+                  <h4 style={{ fontSize: '10px', margin: '0 0 5px 0', color: '#ccc' }}>📊 道具统计</h4>
+                  {(() => {
+                    const itemTypes = {};
+                    selectedAgentData.inventory.forEach(item => {
+                      const type = item.item_type || 'unknown';
+                      itemTypes[type] = (itemTypes[type] || 0) + 1;
+                    });
+                    
+                    return Object.entries(itemTypes).map(([type, count]) => (
+                      <div key={type} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        marginBottom: '2px',
+                        padding: '2px 0'
+                      }}>
+                        <span>{type}:</span>
+                        <span style={{ color: '#4caf50', fontWeight: 'bold' }}>{count} 件</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div style={{ 
+                color: '#666', 
+                fontStyle: 'italic', 
+                textAlign: 'center', 
+                padding: '40px 20px',
+                backgroundColor: '#1a1a1a',
+                borderRadius: '4px',
+                border: '1px dashed #444'
+              }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📭</div>
+                <div style={{ fontSize: '11px' }}>该智能体暂无道具</div>
+                <div style={{ fontSize: '9px', color: '#555', marginTop: '4px' }}>
+                  道具会在游戏进行中获得
                 </div>
               </div>
             )}

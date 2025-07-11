@@ -15,6 +15,7 @@ import RuleManagementPanel from './components/RuleManagementPanel';
 import RuleStatusIndicator from './components/RuleStatusIndicator';
 import ItemToolbar from './components/ItemToolbar';
 import ExperimentMilestones from './components/ExperimentMilestones';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 function App() {
@@ -41,14 +42,35 @@ function App() {
   }, [showSessionHistory, showRuleManagement]);
   
   useEffect(() => {
-    // Suppress ResizeObserver errors
+    // Suppress ResizeObserver errors - enhanced version
     const originalError = console.error;
+    const originalWarn = console.warn;
+    
     console.error = (...args) => {
-      if (args[0]?.includes?.('ResizeObserver loop completed')) {
+      if (args[0]?.toString?.().includes?.('ResizeObserver loop completed') ||
+          args[0]?.toString?.().includes?.('ResizeObserver loop limit exceeded')) {
         return;
       }
       originalError(...args);
     };
+    
+    console.warn = (...args) => {
+      if (args[0]?.toString?.().includes?.('ResizeObserver')) {
+        return;
+      }
+      originalWarn(...args);
+    };
+    
+    // Global error handler for unhandled ResizeObserver errors
+    const handleResizeObserverError = (event) => {
+      if (event.message?.includes('ResizeObserver loop completed')) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        return false;
+      }
+    };
+    
+    window.addEventListener('error', handleResizeObserverError);
     
     // Connect to WebSocket on mount
     connect();
@@ -57,15 +79,18 @@ function App() {
     return () => {
       disconnect();
       console.error = originalError;
+      console.warn = originalWarn;
+      window.removeEventListener('error', handleResizeObserverError);
     };
   }, [connect, disconnect]);
   
   return (
-    <div className="App">
-      <Header 
-        onSessionHistoryClick={() => setShowSessionHistory(true)} 
-        onRuleManagementClick={() => setShowRuleManagement(true)}
-      />
+    <ErrorBoundary>
+      <div className="App">
+        <Header 
+          onSessionHistoryClick={() => setShowSessionHistory(true)} 
+          onRuleManagementClick={() => setShowRuleManagement(true)}
+        />
       
       {/* Session History Modal */}
       {showSessionHistory && (
@@ -209,6 +234,7 @@ function App() {
       {/* Rule Status Indicator - 实时规则状态指示器 */}
       <RuleStatusIndicator onClick={() => setShowRuleManagement(true)} />
     </div>
+    </ErrorBoundary>
   );
 }
 

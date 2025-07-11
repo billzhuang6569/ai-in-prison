@@ -23,7 +23,7 @@ function RuleManagementPanel({ onClose }) {
   // 获取规则状态
   const fetchRuleStatus = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/status`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/status`);
       const data = await response.json();
       if (data.success) {
         setRuleStatus(data.data);
@@ -36,11 +36,19 @@ function RuleManagementPanel({ onClose }) {
   // 获取规则列表
   const fetchRules = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/list`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/list`);
       const data = await response.json();
-      setRules(data);
+      // 确保data是数组
+      if (Array.isArray(data)) {
+        setRules(data);
+      } else {
+        console.error('Rules data is not an array:', data);
+        setRules([]);
+        setError('Invalid rules data format');
+      }
     } catch (err) {
       console.error('Failed to fetch rules:', err);
+      setRules([]); // 确保rules始终是数组
       setError('Failed to load rules');
     }
   }, []);
@@ -48,7 +56,7 @@ function RuleManagementPanel({ onClose }) {
   // 获取规则分类
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/categories`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/categories`);
       const data = await response.json();
       if (data.success) {
         setCategories(data.data);
@@ -61,7 +69,7 @@ function RuleManagementPanel({ onClose }) {
   // 获取执行历史
   const fetchHistory = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/history?limit=20`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/history?limit=20`);
       const data = await response.json();
       if (data.success) {
         setRuleHistory(data.data.history);
@@ -74,7 +82,7 @@ function RuleManagementPanel({ onClose }) {
   // 获取食物分发状态
   const fetchFoodDistributionStatus = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/food-distribution/status`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/food-distribution/status`);
       const data = await response.json();
       if (data.success) {
         setFoodDistributionStatus(data.data);
@@ -87,7 +95,7 @@ function RuleManagementPanel({ onClose }) {
   // 获取下次触发时间
   const fetchNextTriggers = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/rules/debug/next-triggers`);
+      const response = await fetch(`${API_BASE}/api/v1/rules/debug/next-triggers`);
       const data = await response.json();
       if (data.success) {
         setNextTriggers(data.data.next_triggers);
@@ -100,7 +108,7 @@ function RuleManagementPanel({ onClose }) {
   // 启用规则
   const enableRule = async (ruleId) => {
     try {
-      const response = await fetch(`${API_BASE}/rules/enable/${ruleId}`, {
+      const response = await fetch(`${API_BASE}/api/v1/rules/enable/${ruleId}`, {
         method: 'POST'
       });
       const data = await response.json();
@@ -118,7 +126,7 @@ function RuleManagementPanel({ onClose }) {
   // 禁用规则
   const disableRule = async (ruleId) => {
     try {
-      const response = await fetch(`${API_BASE}/rules/disable/${ruleId}`, {
+      const response = await fetch(`${API_BASE}/api/v1/rules/disable/${ruleId}`, {
         method: 'POST'
       });
       const data = await response.json();
@@ -136,7 +144,7 @@ function RuleManagementPanel({ onClose }) {
   // 测试规则触发
   const testRule = async (ruleId) => {
     try {
-      const response = await fetch(`${API_BASE}/rules/test/${ruleId}`, {
+      const response = await fetch(`${API_BASE}/api/v1/rules/test/${ruleId}`, {
         method: 'POST'
       });
       const data = await response.json();

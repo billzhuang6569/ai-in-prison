@@ -6,11 +6,17 @@ import React, { useState, useEffect } from 'react';
 import useWorldStore from '../store/worldStore';
 
 function ExperimentControl() {
-  const { worldState, startExperiment, stopExperiment, isConnected } = useWorldStore();
+  const { worldState, startExperiment, stopExperiment, isConnected, clearWorldState } = useWorldStore();
   const [environmentInjection, setEnvironmentInjection] = useState('');
   const [availableSessions, setAvailableSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState('');
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [apiStatus, setApiStatus] = useState({
+    backend: 'unknown',
+    llm: 'unknown',
+    llmDetails: null,
+    lastCheck: null
+  });
   const [experimentConfig, setExperimentConfig] = useState({
     guardCount: 2,
     prisonerCount: 4,
@@ -26,17 +32,22 @@ function ExperimentControl() {
     { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', cost: '中' },
     { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5', cost: '中' },
     
-    // 新增免费模型
-    { id: 'openrouter/cypher-alpha:free', name: 'Cypher Alpha (免费)', cost: '免费' },
-    { id: 'deepseek/deepseek-r1-0528-qwen3-8b:free', name: 'DeepSeek R1 Qwen3 8B (免费)', cost: '免费' },
-    { id: 'deepseek/deepseek-r1-0528:free', name: 'DeepSeek R1 (免费)', cost: '免费' },
+    // 免费模型（2025年最新）
+    { id: 'qwen/qwen3-235b-a22b:free', name: 'Qwen 3 235B (免费)', cost: '免费' },
     { id: 'deepseek/deepseek-chat-v3-0324:free', name: 'DeepSeek Chat V3 (免费)', cost: '免费' },
-    { id: 'mistralai/devstral-small:free', name: 'Mistral Devstral Small (免费)', cost: '免费' }
+    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash Exp (免费)', cost: '免费' },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (免费)', cost: '免费' }
   ]);
   
   // Load available sessions
   useEffect(() => {
     loadSessions();
+    checkApiStatus();
+    
+    // Check API status every 10 seconds
+    const statusInterval = setInterval(checkApiStatus, 10000);
+    
+    return () => clearInterval(statusInterval);
   }, []);
 
   // Set current session as selected when available
@@ -55,6 +66,44 @@ function ExperimentControl() {
       console.error('Error loading sessions:', error);
     }
   };
+
+  const checkApiStatus = async () => {
+    const now = new Date().toLocaleTimeString();
+    
+    // Check backend status
+    let backendStatus = 'offline';
+    try {
+      const response = await fetch('http://localhost:24861/api/v1/world');
+      if (response.ok) {
+        backendStatus = 'online';
+      }
+    } catch (error) {
+      backendStatus = 'offline';
+    }
+    
+    // Check LLM status (if backend is online)
+    let llmStatus = 'offline';
+    let llmDetails = null;
+    if (backendStatus === 'online') {
+      try {
+        const response = await fetch('http://localhost:24861/api/v1/llm/status');
+        if (response.ok) {
+          const data = await response.json();
+          llmStatus = data.status || 'offline';
+          llmDetails = data;
+        }
+      } catch (error) {
+        llmStatus = 'unknown';
+      }
+    }
+    
+    setApiStatus({
+      backend: backendStatus,
+      llm: llmStatus,
+      llmDetails: llmDetails,
+      lastCheck: now
+    });
+  };
   
   const handleStartNew = () => {
     setShowConfigModal(true);
@@ -62,6 +111,9 @@ function ExperimentControl() {
 
   const handleConfirmStart = async () => {
     try {
+      // Clear world state and events before starting new experiment
+      clearWorldState();
+      
       // Use the existing experiment/start API with configuration
       const response = await fetch('http://localhost:24861/api/v1/experiment/start', {
         method: 'POST',
@@ -82,6 +134,9 @@ function ExperimentControl() {
         console.log('New experiment started:', result);
         loadSessions(); // Refresh session list
         setShowConfigModal(false);
+        
+        // Trigger events table reload by dispatching a custom event
+        window.dispatchEvent(new CustomEvent('experimentStarted'));
         
         // The backend handles starting the experiment and session creation
         alert('新实验已开始！');
@@ -255,16 +310,83 @@ function ExperimentControl() {
         </button>
       </div>
       
+      {/* API Communication Status */}
+      <h3>📡 API通信状态</h3>
+      <div style={{ 
+        backgroundColor: '#333', 
+        padding: '10px', 
+        borderRadius: '4px',
+        marginBottom: '10px' 
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#ccc' }}>后端服务:</span>
+          <span style={{ 
+            fontSize: '11px', 
+            color: apiStatus.backend === 'online' ? '#4CAF50' : '#f44336',
+            fontWeight: 'bold'
+          }}>
+            {apiStatus.backend === 'online' ? '🟢 在线' : '🔴 离线'}
+          </span>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#ccc' }}>LLM服务:</span>
+          <span style={{ 
+            fontSize: '11px', 
+            color: apiStatus.llm === 'online' ? '#4CAF50' : 
+                  apiStatus.llm === 'offline' ? '#f44336' : '#FF9800',
+            fontWeight: 'bold'
+          }}>
+            {apiStatus.llm === 'online' ? '🟢 在线' : 
+             apiStatus.llm === 'offline' ? '🔴 离线' : '🟡 未知'}
+          </span>
+        </div>
+        
+        {apiStatus.llmDetails && (
+          <div style={{ 
+            fontSize: '9px', 
+            color: '#888', 
+            marginBottom: '8px',
+            padding: '4px',
+            backgroundColor: '#444',
+            borderRadius: '3px'
+          }}>
+            <div>模型: {apiStatus.llmDetails.current_model}</div>
+            <div>实验: {apiStatus.llmDetails.experiment_active ? '🟢 运行中' : '🔴 未运行'}</div>
+          </div>
+        )}
+        
+        {apiStatus.lastCheck && (
+          <div style={{ fontSize: '9px', color: '#888', textAlign: 'center' }}>
+            最后检查: {apiStatus.lastCheck}
+          </div>
+        )}
+        
+        <button
+          onClick={checkApiStatus}
+          className="btn"
+          style={{ 
+            fontSize: '9px', 
+            padding: '3px 8px', 
+            width: '100%', 
+            marginTop: '5px',
+            backgroundColor: '#555'
+          }}
+        >
+          🔄 手动检查
+        </button>
+      </div>
+
       {/* Connection Status */}
       <div style={{ 
-        marginTop: '15px', 
+        marginTop: '10px', 
         padding: '8px', 
         backgroundColor: isConnected ? '#1b5e20' : '#c62828',
         borderRadius: '4px',
         fontSize: '12px',
         textAlign: 'center'
       }}>
-        {isConnected ? '🟢 已连接到服务器' : '🔴 未连接到服务器'}
+        {isConnected ? '🟢 WebSocket已连接' : '🔴 WebSocket未连接'}
       </div>
 
       {/* Configuration Modal */}

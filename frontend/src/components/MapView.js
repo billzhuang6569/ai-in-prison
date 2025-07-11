@@ -4,11 +4,15 @@
 import React, { useState, useEffect } from 'react';
 import useWorldStore from '../store/worldStore';
 import { Icon } from '@iconify/react';
+import TurnIndicator from './TurnIndicator';
+import SpeechBubble from './SpeechBubble';
 
 function MapView({ selectedItem, onItemPlace }) {
   const { worldState, selectedAgent, setSelectedAgent } = useWorldStore();
   const [agentTrajectories, setAgentTrajectories] = useState({});
   const [showTrajectories, setShowTrajectories] = useState(true);
+  const [speechBubbles, setSpeechBubbles] = useState({});
+  const [lastProcessedEvents, setLastProcessedEvents] = useState(new Set());
   
   // Item icon mapping for map display using Game Icons
   const itemIconMap = {
@@ -68,6 +72,11 @@ function MapView({ selectedItem, onItemPlace }) {
   useEffect(() => {
     if (!worldState?.session_id) return;
     
+    // Clear cache when session changes
+    setAgentTrajectories({});
+    setSpeechBubbles({});
+    setLastProcessedEvents(new Set());
+    
     const loadTrajectories = async () => {
       try {
         const response = await fetch(`http://localhost:24861/api/v1/events?limit=200&session_id=${worldState.session_id}&event_type=move`);
@@ -99,8 +108,8 @@ function MapView({ selectedItem, onItemPlace }) {
         // Keep only the latest 20 positions per agent and sort by timestamp
         Object.keys(trajectories).forEach(agentName => {
           trajectories[agentName] = trajectories[agentName]
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-            .slice(-20); // Keep last 20 positions
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          // 保留所有历史轨迹，不再限制数量
         });
         
         // Sync trajectory endpoints with current agent positions
@@ -123,8 +132,8 @@ function MapView({ selectedItem, onItemPlace }) {
                   minute: worldState.minute || 0
                 });
                 
-                // Keep only the latest 20 positions
-                trajectories[agentName] = trajectories[agentName].slice(-20);
+                // 保留所有轨迹点
+                // trajectories[agentName] = trajectories[agentName].slice(-20);
               }
             } else if (!trajectories[agentName]) {
               // If no trajectory exists, create one with current position
@@ -148,15 +157,15 @@ function MapView({ selectedItem, onItemPlace }) {
     
     loadTrajectories();
     
-    // Refresh trajectories every 10 seconds when experiment is running
-    const interval = worldState?.is_running ? setInterval(loadTrajectories, 10000) : null;
+    // Refresh trajectories every 3 seconds when experiment is running (faster update)
+    const interval = worldState?.is_running ? setInterval(loadTrajectories, 3000) : null;
     
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [worldState?.session_id, worldState?.is_running]);
   
-  // Additional effect to sync trajectories whenever worldState agents change
+  // Additional effect to sync trajectories whenever worldState agents change (IMMEDIATE UPDATE)
   useEffect(() => {
     if (!worldState?.agents || Object.keys(agentTrajectories).length === 0) return;
     
@@ -183,8 +192,47 @@ function MapView({ selectedItem, onItemPlace }) {
                   hour: worldState.hour,
                   minute: worldState.minute || 0
                 }
-              ].slice(-20); // Keep only latest 20
+              ]; // 保留所有轨迹点
               hasChanges = true;
+              
+              // Force immediate trajectory refresh from server
+              setTimeout(() => {
+                if (worldState?.session_id) {
+                  fetch(`http://localhost:24861/api/v1/events?limit=50&session_id=${worldState.session_id}&event_type=move`)
+                    .then(response => response.json())
+                    .then(data => {
+                      // Update trajectories with latest server data
+                      const trajectories = {};
+                      data.events.forEach(event => {
+                        if (event.event_type === 'move') {
+                          if (!trajectories[event.agent_name]) {
+                            trajectories[event.agent_name] = [];
+                          }
+                          const posMatch = event.description.match(/\((\d+),\s*(\d+)\)/);
+                          if (posMatch) {
+                            trajectories[event.agent_name].push({
+                              x: parseInt(posMatch[1]),
+                              y: parseInt(posMatch[2]),
+                              timestamp: event.timestamp,
+                              day: event.day,
+                              hour: event.hour,
+                              minute: event.minute
+                            });
+                          }
+                        }
+                      });
+                      
+                      // Sort and update trajectories
+                      Object.keys(trajectories).forEach(agentName => {
+                        trajectories[agentName] = trajectories[agentName]
+                          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                      });
+                      
+                      setAgentTrajectories(prev => ({ ...prev, ...trajectories }));
+                    })
+                    .catch(error => console.error('Error refreshing trajectories:', error));
+                }
+              }, 500); // Refresh after 500ms
             }
           }
         });
@@ -195,6 +243,75 @@ function MapView({ selectedItem, onItemPlace }) {
     
     syncTrajectories();
   }, [worldState?.agents, worldState?.day, worldState?.hour, worldState?.minute]);
+  
+  // 监听语言事件以显示对话气泡
+  useEffect(() => {
+    const checkForSpeechEvents = async () => {
+      try {
+        const response = await fetch(`http://localhost:24861/api/v1/events?limit=10&event_type=speech${worldState?.session_id ? `&session_id=${worldState.session_id}` : ''}`);
+        const data = await response.json();
+        
+        if (data.events && data.events.length > 0) {
+          data.events.forEach(event => {
+            const eventId = `${event.id}-${event.timestamp}`;
+            
+            // 如果这个事件还没有处理过，并且是说话事件
+            if (!lastProcessedEvents.has(eventId) && event.event_type === 'speech') {
+              const agent = Object.values(worldState?.agents || {}).find(a => a.name === event.agent_name);
+              
+              if (agent && event.description) {
+                // 提取说话内容 - 支持中英文格式
+                let speechContent = '';
+                // 尝试匹配英文格式: "Said to [Target]: 'Message'"
+                const englishMatch = event.description.match(/Said to .+?:\s*'([^']+)'/);
+                // 尝试匹配中文格式: "说："Message""
+                const chineseMatch = event.description.match(/说[：:]\s*"([^"]+)"/);
+                
+                if (englishMatch) {
+                  speechContent = englishMatch[1];
+                } else if (chineseMatch) {
+                  speechContent = chineseMatch[1];
+                } else {
+                  // 如果都不匹配，使用整个描述
+                  speechContent = event.description;
+                }
+                
+                // 显示对话气泡
+                setSpeechBubbles(prev => ({
+                  ...prev,
+                  [agent.agent_id]: {
+                    agent: agent,
+                    message: speechContent,
+                    position: { x: agent.position[0], y: agent.position[1] }
+                  }
+                }));
+                
+                // 标记为已处理
+                setLastProcessedEvents(prev => new Set([...prev, eventId]));
+                
+                // 30秒后自动清除（防止重复）
+                setTimeout(() => {
+                  setSpeechBubbles(prev => {
+                    const updated = { ...prev };
+                    delete updated[agent.agent_id];
+                    return updated;
+                  });
+                }, 30000);
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error checking for speech events:', error);
+      }
+    };
+    
+    if (worldState?.is_running) {
+      checkForSpeechEvents();
+      const interval = setInterval(checkForSpeechEvents, 2000); // 每2秒检查一次
+      return () => clearInterval(interval);
+    }
+  }, [worldState?.is_running, worldState?.agents, lastProcessedEvents]);
   
   if (!worldState) {
     return (
@@ -212,10 +329,11 @@ function MapView({ selectedItem, onItemPlace }) {
   
   const { game_map, agents } = worldState;
   
-  // Create grid template
+  // Create grid template - 增大地图单元格尺寸
+  const cellSize = 45; // 从30px增加到45px
   const gridStyle = {
-    gridTemplateColumns: `repeat(${game_map.width}, 30px)`,
-    gridTemplateRows: `repeat(${game_map.height}, 30px)`
+    gridTemplateColumns: `repeat(${game_map.width}, ${cellSize}px)`,
+    gridTemplateRows: `repeat(${game_map.height}, ${cellSize}px)`
   };
   
   // Create cells array
@@ -326,9 +444,7 @@ function MapView({ selectedItem, onItemPlace }) {
                   selectedAgent === agent.agent_id ? 'selected' : ''
                 }`}
                 style={{
-                  zIndex: 10 + index,
-                  fontSize: '7px',
-                  fontWeight: 'bold'
+                  zIndex: 10 + index
                 }}
                 title={`${agent.name} (${agent.role})\nHP: ${agent.hp}, Sanity: ${agent.sanity}, Hunger: ${agent.hunger}, Thirst: ${agent.thirst}\nPosition: (${agent.position[0]}, ${agent.position[1]})\nInventory: ${agent.inventory && agent.inventory.length > 0 ? agent.inventory.map(item => item.name).join(', ') : '空'}`}
               >
@@ -342,11 +458,14 @@ function MapView({ selectedItem, onItemPlace }) {
   }
   
   return (
-    <div className="map-container">
+    <div className="map-container-enhanced">
       <div>
+        {/* 回合指示器 */}
+        <TurnIndicator />
+        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>
-            🗺️ 监狱地图 ({game_map.width}x{game_map.height})
+          <h3 style={{ margin: 0, color: '#ecf0f1', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+            🗺️ 监狱地图 ({game_map.width}×{game_map.height})
           </h3>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
@@ -374,6 +493,23 @@ function MapView({ selectedItem, onItemPlace }) {
             {cells}
           </div>
           
+          {/* 对话气泡显示 */}
+          {Object.entries(speechBubbles).map(([agentId, bubbleData]) => (
+            <SpeechBubble
+              key={agentId}
+              agent={bubbleData.agent}
+              message={bubbleData.message}
+              position={bubbleData.position}
+              onClose={() => {
+                setSpeechBubbles(prev => {
+                  const updated = { ...prev };
+                  delete updated[agentId];
+                  return updated;
+                });
+              }}
+            />
+          ))}
+          
           {/* SVG overlay for trajectory lines */}
           {showTrajectories && (
             <svg
@@ -381,10 +517,10 @@ function MapView({ selectedItem, onItemPlace }) {
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                width: `${game_map.width * 31}px`, // 30px cell + 1px gap
-                height: `${game_map.height * 31}px`,
+                width: `${game_map.width * (cellSize + 1)}px`, // cellSize + 1px gap
+                height: `${game_map.height * (cellSize + 1)}px`,
                 pointerEvents: 'none',
-                zIndex: 5
+                zIndex: 1
               }}
             >
               {Object.entries(agentTrajectories).map(([agentName, trajectory]) => {
@@ -410,8 +546,8 @@ function MapView({ selectedItem, onItemPlace }) {
                 
                 // Create path data using adjusted trajectory
                 const pathData = adjustedTrajectory.map((point, index) => {
-                  const x = point.x * 31 + 15; // Cell center (30px + 1px gap)
-                  const y = point.y * 31 + 15;
+                  const x = point.x * (cellSize + 1) + cellSize/2; // Cell center
+                  const y = point.y * (cellSize + 1) + cellSize/2;
                   return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
                 }).join(' ');
                 
@@ -435,8 +571,8 @@ function MapView({ selectedItem, onItemPlace }) {
                       
                       if (dx === 0 && dy === 0) return null;
                       
-                      const x = point.x * 31 + 15;
-                      const y = point.y * 31 + 15;
+                      const x = point.x * (cellSize + 1) + cellSize/2;
+                      const y = point.y * (cellSize + 1) + cellSize/2;
                       const angle = Math.atan2(dy, dx) * 180 / Math.PI;
                       
                       return (
@@ -456,8 +592,8 @@ function MapView({ selectedItem, onItemPlace }) {
                     {/* Start point marker */}
                     {adjustedTrajectory.length > 0 && (
                       <circle
-                        cx={adjustedTrajectory[0].x * 31 + 15}
-                        cy={adjustedTrajectory[0].y * 31 + 15}
+                        cx={adjustedTrajectory[0].x * (cellSize + 1) + cellSize/2}
+                        cy={adjustedTrajectory[0].y * (cellSize + 1) + cellSize/2}
                         r="3"
                         fill={pathColor}
                         opacity="0.8"
@@ -468,8 +604,8 @@ function MapView({ selectedItem, onItemPlace }) {
                     
                     {/* End point marker (current position) */}
                     <circle
-                      cx={currentPos.x * 31 + 15}
-                      cy={currentPos.y * 31 + 15}
+                      cx={currentPos.x * (cellSize + 1) + cellSize/2}
+                      cy={currentPos.y * (cellSize + 1) + cellSize/2}
                       r="4"
                       fill={pathColor}
                       opacity="1"
@@ -486,22 +622,22 @@ function MapView({ selectedItem, onItemPlace }) {
         <div style={{ 
           marginTop: '20px',
           textAlign: 'center',
-          fontSize: '12px',
+          fontSize: '13px',
           color: '#ccc'
         }}>
-          <div>
-            <span style={{ color: '#4a4a4a', backgroundColor: '#4a4a4a', padding: '2px 4px', margin: '2px' }}>■</span> Cell Block
-            <span style={{ color: '#8B4513', backgroundColor: '#8B4513', padding: '2px 4px', margin: '2px' }}>■</span> Cafeteria
-            <span style={{ color: '#228B22', backgroundColor: '#228B22', padding: '2px 4px', margin: '2px' }}>■</span> Yard
-            <span style={{ color: '#800000', backgroundColor: '#800000', padding: '2px 4px', margin: '2px' }}>■</span> Solitary
-            <span style={{ color: '#000080', backgroundColor: '#000080', padding: '2px 4px', margin: '2px' }}>■</span> Guard Room
+          <div style={{ marginBottom: '8px' }}>
+            <span style={{ color: '#4a4a4a', backgroundColor: '#4a4a4a', padding: '3px 6px', margin: '3px', borderRadius: '3px' }}>■</span> 牢房区域
+            <span style={{ color: '#8B4513', backgroundColor: '#8B4513', padding: '3px 6px', margin: '3px', borderRadius: '3px' }}>■</span> 食堂
+            <span style={{ color: '#228B22', backgroundColor: '#228B22', padding: '3px 6px', margin: '3px', borderRadius: '3px' }}>■</span> 院子
+            <span style={{ color: '#800000', backgroundColor: '#800000', padding: '3px 6px', margin: '3px', borderRadius: '3px' }}>■</span> 禁闭室
+            <span style={{ color: '#000080', backgroundColor: '#000080', padding: '3px 6px', margin: '3px', borderRadius: '3px' }}>■</span> 警卫室
           </div>
           <div style={{ marginTop: '10px' }}>
-            <span style={{ color: '#0066cc', backgroundColor: '#0066cc', padding: '2px 4px', margin: '2px', borderRadius: '50%' }}>G1</span> Guard
-            <span style={{ color: '#cc6600', backgroundColor: '#cc6600', padding: '2px 4px', margin: '2px', borderRadius: '50%' }}>P1</span> Prisoner
+            <span style={{ color: '#0066cc', backgroundColor: '#0066cc', padding: '3px 6px', margin: '3px', borderRadius: '50%', fontSize: '11px' }}>G1</span> 狱警
+            <span style={{ color: '#cc6600', backgroundColor: '#cc6600', padding: '3px 6px', margin: '3px', borderRadius: '50%', fontSize: '11px' }}>P1</span> 囚犯
             {showTrajectories && (
-              <span style={{ color: '#888', fontSize: '10px', marginLeft: '10px' }}>
-                ━━━ 移动轨迹 (虚线+箭头显示方向)
+              <span style={{ color: '#888', fontSize: '11px', marginLeft: '15px' }}>
+                ━━━ 移动轨迹 (所有历史路径)
               </span>
             )}
           </div>

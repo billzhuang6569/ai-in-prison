@@ -1427,11 +1427,21 @@ Based on my analysis, I will... [choose one action and explain why it's the best
         
         return prompt
     
-    async def _build_enhanced_prompt(self, agent: Agent, world_state: WorldState, contextual_actions: List[Dict[str, Any]]) -> str:
+    async def _build_enhanced_prompt(self, agent: Agent, world_state: WorldState, contextual_actions: List[Dict[str, Any]], turn_actions_taken: list = None) -> str:
         """Build enhanced prompt with contextual actions"""
         
         # Get base prompt
         base_prompt = await self._build_prompt(agent, world_state)
+        
+        # Add turn action context if any actions have been taken this turn
+        turn_context = ""
+        if turn_actions_taken:
+            turn_context = f"\n\n## THIS TURN'S ACTIONS\n"
+            turn_context += f"**ACTIONS ALREADY TAKEN THIS TURN ({len(turn_actions_taken)}/{agent.action_points} AP used):**\n"
+            for i, action in enumerate(turn_actions_taken, 1):
+                turn_context += f"• Action {i}: {action}\n"
+            turn_context += f"\n**REMAINING ACTION POINTS: {agent.action_points - len(turn_actions_taken)}**\n"
+            turn_context += "**IMPORTANT:** Avoid repeating the same action type unless specifically needed. Consider different actions for variety and effectiveness.\n"
         
         # Add comprehensive action analysis with role-specific styling
         if agent.role.value == "Guard":
@@ -1496,7 +1506,7 @@ Based on my analysis, I will... [choose one action and explain why it's the best
             actions_info += "• Consider your personality, current desperation level, and immediate survival needs\n"
             actions_info += "• Sometimes the 'safest' choice isn't always the right one for your situation\n\n"
         
-        return base_prompt + actions_info
+        return base_prompt + turn_context + actions_info
     
     def _get_contextual_actions_schema(self, contextual_actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Get action schema filtered by contextual relevance"""
@@ -1520,7 +1530,7 @@ Based on my analysis, I will... [choose one action and explain why it's the best
         
         return filtered_schema
     
-    async def get_agent_decision(self, agent: Agent, world_state: WorldState) -> Optional[Dict[str, Any]]:
+    async def get_agent_decision(self, agent: Agent, world_state: WorldState, turn_actions_taken: list = None) -> Optional[Dict[str, Any]]:
         """Get LLM decision for an agent using enhanced prompts with behavior filtering"""
         
         if not self.api_key:
@@ -1529,7 +1539,7 @@ Based on my analysis, I will... [choose one action and explain why it's the best
         # Get contextual actions from behavior filter
         contextual_actions = self.behavior_filter.get_contextual_actions(agent, world_state)
         
-        prompt = await self._build_enhanced_prompt(agent, world_state, contextual_actions)
+        prompt = await self._build_enhanced_prompt(agent, world_state, contextual_actions, turn_actions_taken)
         
         # Store prompt data for frontend display
         import datetime

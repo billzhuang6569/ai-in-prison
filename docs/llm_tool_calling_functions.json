@@ -1,0 +1,285 @@
+[
+  {
+    "name": "do_nothing",
+    "description": "Rest or observe. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "required": []
+    }
+  },
+  {
+    "name": "move",
+    "description": "Move to target coordinates (up to 8 steps). Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "description": "Target X coordinate"
+        },
+        "y": {
+          "type": "integer",
+          "description": "Target Y coordinate"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["x", "y"]
+    }
+  },
+  {
+    "name": "speak",
+    "description": "Speak to another agent within 2 cells. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the target agent"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message to speak (max 30 characters)"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "message"]
+    }
+  },
+  {
+    "name": "attack",
+    "description": "Attack another agent within 2 cells. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the target agent"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for attacking"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "reason"]
+    }
+  },
+  {
+    "name": "use_item",
+    "description": "Use an item from inventory. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "description": "ID of the item to use"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["item_id"]
+    }
+  },
+  {
+    "name": "give_item",
+    "description": "Give an item from inventory to another agent within 2 cells. Improves relationships. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the target agent"
+        },
+        "item_id": {
+          "type": "string",
+          "description": "ID of the item to give"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "item_id"]
+    }
+  },
+  {
+    "name": "announce_rule",
+    "description": "GUARDS ONLY: Announce a new rule to all prisoners. Shows authority. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "rule_text": {
+          "type": "string",
+          "description": "The rule to announce"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["rule_text"]
+    }
+  },
+  {
+    "name": "patrol_inspect",
+    "description": "GUARDS ONLY: Inspect a nearby agent for contraband. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the agent to inspect"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id"]
+    }
+  },
+  {
+    "name": "enforce_punishment",
+    "description": "GUARDS ONLY: Punish a prisoner for misconduct. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the prisoner to punish"
+        },
+        "punishment_type": {
+          "type": "string",
+          "description": "Type of punishment (isolation, warning, etc.)"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "punishment_type"]
+    }
+  },
+  {
+    "name": "assign_task",
+    "description": "GUARDS ONLY: Assign a task to a prisoner. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the prisoner"
+        },
+        "task_text": {
+          "type": "string",
+          "description": "Task to assign"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "task_text"]
+    }
+  },
+  {
+    "name": "emergency_assembly",
+    "description": "GUARDS ONLY: Call emergency assembly affecting all prisoners. Consumes 3 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "description": "Reason for emergency assembly"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["reason"]
+    }
+  },
+  {
+    "name": "steal_item",
+    "description": "PRISONERS ONLY: Attempt to steal item from another agent. Risky. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the target agent"
+        },
+        "item_type": {
+          "type": "string",
+          "description": "Type of item to steal"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "item_type"]
+    }
+  },
+  {
+    "name": "form_alliance",
+    "description": "PRISONERS ONLY: Form an alliance with another prisoner. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "description": "ID of the prisoner to ally with"
+        },
+        "alliance_purpose": {
+          "type": "string",
+          "description": "Purpose of the alliance"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["target_id", "alliance_purpose"]
+    }
+  },
+  {
+    "name": "craft_weapon",
+    "description": "PRISONERS ONLY: Craft a makeshift weapon from materials. Requires tools. Consumes 2 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "materials": {
+          "type": "string",
+          "description": "Materials to use for crafting"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["materials"]
+    }
+  },
+  {
+    "name": "spread_rumor",
+    "description": "PRISONERS ONLY: Spread a rumor to nearby prisoners. Affects morale. Consumes 1 action point.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "rumor_text": {
+          "type": "string",
+          "description": "The rumor to spread"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["rumor_text"]
+    }
+  },
+  {
+    "name": "dig_tunnel",
+    "description": "PRISONERS ONLY: Dig escape tunnel. Requires tools. High effort. Consumes 3 action points.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "Location to dig (e.g., 'cell corner', 'yard')"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["location"]
+    }
+  }
+]

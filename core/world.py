@@ -256,7 +256,7 @@ class World:
         
         if cafeteria_pos:
             self.state.game_map.items[cafeteria_pos] = [
-                Item(item_id="food_001", name="Prison Food", description="Basic cafeteria meal", item_type=ItemEnum.FOOD),
+                Item(item_id="food_001", name="Food", description="Prison meal", item_type=ItemEnum.FOOD),
                 Item(item_id="water_001", name="Water", description="Clean drinking water", item_type=ItemEnum.WATER)
             ]
         

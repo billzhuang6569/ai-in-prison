@@ -7,7 +7,7 @@ import useWorldStore from '../store/worldStore';
 
 function AgentCards() {
   const { worldState, selectedAgent, setSelectedAgent } = useWorldStore();
-  const [cardView, setCardView] = useState('overview'); // 'overview', 'personality', 'relationships', 'inventory'
+  const [cardView, setCardView] = useState('status'); // 'status' (合并了HP、关系值、道具)
   
   if (!worldState?.agents) {
     return (
@@ -60,35 +60,29 @@ function AgentCards() {
     <div className="panel">
       <h2>🎴 智能体卡片</h2>
       
-      {/* View Toggle */}
+      {/* View Toggle - 简化为一个合并标签页 */}
       <div style={{ 
         display: 'flex', 
         gap: '3px', 
         marginBottom: '15px',
-        fontSize: '10px'
+        fontSize: '10px',
+        justifyContent: 'center'
       }}>
-        {[
-          { key: 'overview', label: '📊 概览', icon: '📊' },
-          { key: 'personality', label: '🧭 性格', icon: '🧭' },
-          { key: 'relationships', label: '🤝 关系', icon: '🤝' },
-          { key: 'inventory', label: '🎒 物品', icon: '🎒' }
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setCardView(tab.key)}
-            style={{
-              padding: '4px 6px',
-              backgroundColor: cardView === tab.key ? '#007bff' : '#444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              fontSize: '9px',
-              cursor: 'pointer'
-            }}
-          >
-            {tab.icon}
-          </button>
-        ))}
+        <button
+          onClick={() => setCardView('status')}
+          style={{
+            padding: '6px 12px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          📊 状态总览
+        </button>
       </div>
       
       {/* Agent Cards */}
@@ -128,101 +122,54 @@ function AgentCards() {
               </div>
             </div>
             
-            {/* Card Content based on view */}
-            {cardView === 'overview' && (
-              <div>
-                {/* Health Status */}
-                <div style={{ marginBottom: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '8px', color: '#ccc' }}>❤️ HP</span>
-                    <span style={{ fontSize: '8px' }}>{agent.hp}</span>
-                  </div>
-                  <div style={{ height: '3px', backgroundColor: '#555', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ 
-                      width: `${agent.hp}%`, 
-                      height: '100%', 
-                      backgroundColor: '#f44336'
-                    }} />
-                  </div>
+            {/* 合并的状态总览 - 包含HP、关系值、道具 */}
+            <div>
+              {/* Health Status */}
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '9px', color: '#ccc', fontWeight: 'bold' }}>❤️ HP</span>
+                  <span style={{ fontSize: '9px' }}>{agent.hp}</span>
                 </div>
-                
-                <div style={{ marginBottom: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '8px', color: '#ccc' }}>🧠 理智</span>
-                    <span style={{ fontSize: '8px' }}>{agent.sanity}</span>
-                  </div>
-                  <div style={{ height: '3px', backgroundColor: '#555', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ 
-                      width: `${agent.sanity}%`, 
-                      height: '100%', 
-                      backgroundColor: '#6f42c1'
-                    }} />
-                  </div>
+                <div style={{ height: '4px', backgroundColor: '#555', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${agent.hp}%`, 
+                    height: '100%', 
+                    backgroundColor: agent.hp > 70 ? '#4caf50' : agent.hp > 30 ? '#ff9800' : '#f44336',
+                    transition: 'width 0.3s ease'
+                  }} />
                 </div>
-                
-                {/* Position and Actions */}
-                <div style={{ fontSize: '8px', color: '#999', marginBottom: '4px' }}>
-                  📍 ({agent.position[0]}, {agent.position[1]}) | ⚡ {agent.action_points}/3
-                </div>
-                
-                {/* Status Tags */}
-                {agent.status_tags.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                    {agent.status_tags.slice(0, 2).map(tag => (
-                      <span 
-                        key={tag}
-                        style={{
-                          backgroundColor: '#666',
-                          color: '#fff',
-                          padding: '1px 3px',
-                          borderRadius: '2px',
-                          fontSize: '7px'
-                        }}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {agent.status_tags.length > 2 && (
-                      <span style={{ fontSize: '7px', color: '#888' }}>+{agent.status_tags.length - 2}</span>
-                    )}
-                  </div>
-                )}
               </div>
-            )}
-            
-            {cardView === 'personality' && (
-              <div>
-                {Object.entries(agent.traits).map(([trait, value]) => (
-                  <div key={trait} style={{ marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>
-                      <span style={{ fontSize: '8px', color: '#ccc' }}>
-                        {getPersonalityIcon(trait, value)} {trait}
-                      </span>
-                      <span style={{ fontSize: '8px' }}>{value}</span>
-                    </div>
-                    <div style={{ height: '2px', backgroundColor: '#555', borderRadius: '1px', overflow: 'hidden' }}>
-                      <div style={{ 
-                        width: `${value}%`, 
-                        height: '100%', 
-                        backgroundColor: value > 50 ? '#4caf50' : '#ff9800'
-                      }} />
-                    </div>
-                  </div>
-                ))}
+              
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '9px', color: '#ccc', fontWeight: 'bold' }}>🧠 理智</span>
+                  <span style={{ fontSize: '9px' }}>{agent.sanity}</span>
+                </div>
+                <div style={{ height: '4px', backgroundColor: '#555', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${agent.sanity}%`, 
+                    height: '100%', 
+                    backgroundColor: agent.sanity > 70 ? '#6f42c1' : agent.sanity > 30 ? '#e83e8c' : '#dc3545',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
               </div>
-            )}
-            
-            {cardView === 'relationships' && (
-              <div>
+              
+              {/* Key Relationships */}
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#ccc', fontWeight: 'bold', marginBottom: '4px' }}>
+                  🤝 关系值
+                </div>
                 {Object.entries(agent.relationships || {}).length > 0 ? (
-                  Object.entries(agent.relationships).slice(0, 4).map(([targetName, relationship]) => (
+                  Object.entries(agent.relationships).slice(0, 2).map(([targetName, relationship]) => (
                     <div key={targetName} style={{ marginBottom: '3px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '8px', color: '#ccc' }}>{targetName}</span>
                         <span 
                           style={{ 
                             fontSize: '8px',
-                            color: getRelationshipColor(relationship.score)
+                            color: getRelationshipColor(relationship.score),
+                            fontWeight: 'bold'
                           }}
                         >
                           {relationship.score}
@@ -232,24 +179,27 @@ function AgentCards() {
                         <div style={{ 
                           width: `${relationship.score}%`, 
                           height: '100%', 
-                          backgroundColor: getRelationshipColor(relationship.score)
+                          backgroundColor: getRelationshipColor(relationship.score),
+                          transition: 'width 0.3s ease'
                         }} />
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div style={{ fontSize: '8px', color: '#666', textAlign: 'center', padding: '10px' }}>
+                  <div style={{ fontSize: '8px', color: '#666', textAlign: 'center', padding: '4px' }}>
                     暂无关系数据
                   </div>
                 )}
               </div>
-            )}
-            
-            {cardView === 'inventory' && (
-              <div>
+              
+              {/* Inventory */}
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#ccc', fontWeight: 'bold', marginBottom: '4px' }}>
+                  🎒 道具
+                </div>
                 {agent.inventory && agent.inventory.length > 0 ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                    {agent.inventory.slice(0, 6).map((item, index) => (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
+                    {agent.inventory.slice(0, 4).map((item, index) => (
                       <div 
                         key={index}
                         style={{
@@ -258,26 +208,32 @@ function AgentCards() {
                           padding: '2px 4px',
                           borderRadius: '3px',
                           fontSize: '7px',
-                          textAlign: 'center'
+                          textAlign: 'center',
+                          border: '1px solid #777'
                         }}
                         title={item.description || item.name}
                       >
-                        🎒 {item.name}
+                        {item.name}
                       </div>
                     ))}
-                    {agent.inventory.length > 6 && (
-                      <div style={{ fontSize: '7px', color: '#888' }}>
-                        +{agent.inventory.length - 6}
+                    {agent.inventory.length > 4 && (
+                      <div style={{ fontSize: '7px', color: '#888', padding: '2px' }}>
+                        +{agent.inventory.length - 4}
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div style={{ fontSize: '8px', color: '#666', textAlign: 'center', padding: '10px' }}>
-                    🎒 无物品
+                  <div style={{ fontSize: '8px', color: '#666', textAlign: 'center', padding: '4px' }}>
+                    无物品
                   </div>
                 )}
               </div>
-            )}
+              
+              {/* Position and Actions */}
+              <div style={{ fontSize: '8px', color: '#999', marginTop: '6px', textAlign: 'center' }}>
+                📍 ({agent.position[0]}, {agent.position[1]}) | ⚡ {agent.action_points}/3
+              </div>
+            </div>
           </div>
         ))}
       </div>
