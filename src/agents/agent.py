@@ -136,6 +136,8 @@ class AIAgent:
         """
         Convert world state JSON to natural language description.
         
+        Uses spatial indexing for O(1) agent lookups instead of O(N) iteration.
+        
         Args:
             world_state: Current world state
             
@@ -145,6 +147,7 @@ class AIAgent:
         tick = world_state.get('tick', 0)
         agents = world_state.get('agents', [])
         map_info = world_state.get('map', {})
+        spatial_index = world_state.get('spatial_index', {})
         
         # Find self in the world
         my_info = None
@@ -162,23 +165,39 @@ class AIAgent:
         # Describe current situation
         perception = f"Tick {tick}: I am at position ({my_x}, {my_y}). "
         
-        # Describe nearby agents
+        # Use spatial index for efficient nearby agent detection
         nearby_agents = []
-        for agent in agents:
-            if agent.get('id') != self.id:
-                agent_pos = agent.get('position', {})
-                agent_x, agent_y = agent_pos.get('x', 0), agent_pos.get('y', 0)
-                distance = abs(agent_x - my_x) + abs(agent_y - my_y)  # Manhattan distance
+        
+        # Check all positions within 2 steps (Manhattan distance)
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                if dx == 0 and dy == 0:
+                    continue  # Skip self position
                 
-                if distance <= 2:  # Consider agents within 2 steps as nearby
-                    role = agent.get('role', 'unknown')
-                    agent_id = agent.get('id', 'unknown')
-                    utterance = agent.get('last_utterance', '')
+                check_x, check_y = my_x + dx, my_y + dy
+                distance = abs(dx) + abs(dy)
+                
+                if distance <= 2:  # Within perception range
+                    coord_key = (check_x, check_y)
+                    agent_ids_at_pos = spatial_index.get(coord_key, [])
                     
-                    agent_desc = f"{role} {agent_id} at ({agent_x}, {agent_y})"
-                    if utterance:
-                        agent_desc += f" (said: '{utterance}')"
-                    nearby_agents.append(agent_desc)
+                    for agent_id in agent_ids_at_pos:
+                        if agent_id != self.id:  # Skip self
+                            # Find agent details
+                            agent_info = None
+                            for agent in agents:
+                                if agent.get('id') == agent_id:
+                                    agent_info = agent
+                                    break
+                            
+                            if agent_info:
+                                role = agent_info.get('role', 'unknown')
+                                utterance = agent_info.get('last_utterance', '')
+                                
+                                agent_desc = f"{role} {agent_id} at ({check_x}, {check_y})"
+                                if utterance:
+                                    agent_desc += f" (said: '{utterance}')"
+                                nearby_agents.append(agent_desc)
         
         if nearby_agents:
             perception += f"Nearby: {', '.join(nearby_agents)}. "

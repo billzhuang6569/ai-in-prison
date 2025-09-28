@@ -8,17 +8,22 @@ and provides WebSocket communication with the frontend.
 import asyncio
 import json
 import uuid
+import csv
+import io
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Set, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from src.core.engine import SimulationEngine
 from src.agents.agent import AIAgent
 from src.logging.logger import SimulationLogger
 from src.core.inventory_system import ItemManager
+from src.core.experiment_manager import ExperimentManager
 from config import Config
 
 
@@ -92,6 +97,7 @@ class SimulationController:
         self.simulation_task = None
         
         # Experiment management
+        self.current_experiment: ExperimentManager = None
         self.current_experiment_id = None
         self.experiment_start_time = None
         
@@ -218,16 +224,17 @@ class SimulationController:
         if self.is_running:
             await self.stop_simulation()
         
-        # Create new experiment
-        self.current_experiment_id = str(uuid.uuid4())[:8]
-        self.experiment_start_time = datetime.now()
+        # Create new experiment manager
+        self.current_experiment = ExperimentManager(experiment_config)
+        self.current_experiment_id = self.current_experiment.experiment_id
+        self.experiment_start_time = self.current_experiment.start_time
         
         # Initialize logger for this experiment
-        experiment_session_id = f"experiment_{self.current_experiment_id}_{self.experiment_start_time.strftime('%Y%m%d_%H%M%S')}"
+        experiment_session_id = self.current_experiment.get_session_id()
         self.logger = SimulationLogger(session_id=experiment_session_id)
         
-        # Initialize world with custom configuration
-        self._initialize_world_with_config(experiment_config)
+        # Generate initial state and agents using experiment manager
+        self.current_state, self.agents = self.current_experiment.create_initial_state()
         
         self.is_running = True
         self.is_paused = False
@@ -249,62 +256,6 @@ class SimulationController:
             "tick": self.current_state["tick"]
         })
 
-    def _initialize_world_with_config(self, config: Dict[str, Any]):
-        """Initialize world state with custom configuration."""
-        map_size = config.get('mapSize', [10, 10])
-        agents_config = config.get('agents', [])
-        
-        # Create world state
-        self.current_state = {
-            "tick": 0,
-            "map": {
-                "size": map_size,
-                "grid": self._generate_map_grid(map_size)
-            },
-            "agents": [],
-            "objects": []
-        }
-        
-        # Create agents from configuration
-        self.agents = []
-        for agent_config in agents_config:
-            agent = AIAgent(
-                agent_id=agent_config['id'],
-                personality=agent_config['personality'],
-                model_name=Config.DEFAULT_MODEL,
-                role=agent_config['role']
-            )
-            self.agents.append(agent)
-            
-            # Add to world state
-            self.current_state["agents"].append({
-                "id": agent_config['id'],
-                "role": agent_config['role'],
-                "position": agent_config['position'],
-                "status": {"energy": 100, "mood": "neutral"},
-                "inventory": []
-            })
-
-    def _generate_map_grid(self, map_size):
-        """Generate map grid with walls."""
-        width, height = map_size
-        grid = []
-        
-        # Add perimeter walls
-        for x in range(width):
-            grid.append({"x": x, "y": 0, "type": "Wall"})
-            grid.append({"x": x, "y": height - 1, "type": "Wall"})
-        
-        for y in range(1, height - 1):
-            grid.append({"x": 0, "y": y, "type": "Wall"})
-            grid.append({"x": width - 1, "y": y, "type": "Wall"})
-        
-        # Add some internal walls for a prison-like layout
-        if width >= 10 and height >= 10:
-            for y in range(3, 7):
-                grid.append({"x": width // 2, "y": y, "type": "Wall"})
-        
-        return grid
     async def start_simulation(self):
         """Start the simulation loop with default configuration."""
         default_config = {
@@ -364,6 +315,8 @@ class SimulationController:
                 "end_time": datetime.now().isoformat(),
                 "final_tick": self.current_state["tick"]
             })
+            # Gracefully close the logger to ensure all logs are written
+            self.logger.close()
         
         # Broadcast experiment end
         await self.websocket_manager.broadcast({
@@ -450,6 +403,16 @@ class SimulationController:
 
 # Initialize FastAPI app and simulation controller
 app = FastAPI(title="Project Chimera API", version="1.0.0")
+
+# Add CORS middleware to allow frontend connections
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 simulation = SimulationController()
 
 # Mount static files for frontend
@@ -572,22 +535,25 @@ async def get_experiments():
     for file_path in log_dir.glob("experiment_*_events.jsonl"):
         # Extract experiment ID from filename
         filename = file_path.stem
+        # Use the full filename as the experiment ID for consistency
+        full_experiment_id = filename.replace('_events', '')
         parts = filename.split('_')
         if len(parts) >= 4:
-            exp_id = parts[1]
+            exp_id = parts[1]  # Short ID for display
             date_part = parts[2]
             time_part = parts[3]
             
-            if exp_id not in experiment_files:
-                experiment_files[exp_id] = {
+            if full_experiment_id not in experiment_files:
+                experiment_files[full_experiment_id] = {
                     'id': exp_id,
+                    'full_id': full_experiment_id,
                     'date': date_part,
                     'time': time_part,
                     'events_file': file_path
                 }
     
     # Read experiment data
-    for exp_id, exp_data in experiment_files.items():
+    for full_exp_id, exp_data in experiment_files.items():
         try:
             with open(exp_data['events_file'], 'r') as f:
                 lines = f.readlines()
@@ -597,11 +563,12 @@ async def get_experiments():
                     last_event = json.loads(lines[-1])
                     
                     experiments.append({
-                        'id': exp_id,
+                        'id': exp_data['id'],  # Short ID for display
+                        'full_id': full_exp_id,  # Full ID for API calls
                         'start_time': first_event.get('timestamp'),
-                        'end_time': last_event.get('timestamp') if last_event.get('type') == 'experiment_end' else None,
-                        'status': 'completed' if last_event.get('type') == 'experiment_end' else 'stopped',
-                        'final_tick': last_event.get('final_tick', 0),
+                        'end_time': last_event.get('timestamp') if last_event.get('type') in ['experiment_end', 'simulation_cancelled'] else None,
+                        'status': 'completed' if last_event.get('type') == 'experiment_end' else 'cancelled' if last_event.get('type') == 'simulation_cancelled' else 'stopped',
+                        'final_tick': last_event.get('final_tick', last_event.get('tick', 0)),
                         'agent_count': 4  # Default for now
                     })
         except Exception as e:
@@ -623,6 +590,238 @@ async def get_agents():
         }
         for agent in simulation.agents
     ]
+
+
+@app.get("/api/export/{experiment_id}")
+async def export_experiment_logs(experiment_id: str, format: str = "json"):
+    """
+    Export experiment logs in JSON or CSV format.
+    
+    Args:
+        experiment_id: The experiment session ID
+        format: Export format ('json' or 'csv')
+    """
+    if format not in ["json", "csv"]:
+        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+    
+    log_dir = Path(Config.LOG_DIR)
+    
+    # Check if experiment exists
+    decisions_file = log_dir / f"{experiment_id}_decisions.jsonl"
+    world_state_file = log_dir / f"{experiment_id}_world_state.jsonl"
+    events_file = log_dir / f"{experiment_id}_events.jsonl"
+    
+    if not decisions_file.exists():
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    try:
+        if format == "json":
+            return await _export_as_json(experiment_id, decisions_file, world_state_file, events_file)
+        else:
+            return await _export_as_csv(experiment_id, decisions_file, world_state_file, events_file)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+
+async def _export_as_json(experiment_id: str, decisions_file: Path, world_state_file: Path, events_file: Path):
+    """Export experiment data as JSON."""
+    export_data = {
+        "experiment_id": experiment_id,
+        "export_timestamp": datetime.now().isoformat(),
+        "decisions": [],
+        "world_states": [],
+        "events": []
+    }
+    
+    # Read decisions
+    if decisions_file.exists():
+        with open(decisions_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    export_data["decisions"].append(json.loads(line))
+    
+    # Read world states
+    if world_state_file.exists():
+        with open(world_state_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    export_data["world_states"].append(json.loads(line))
+    
+    # Read events
+    if events_file.exists():
+        with open(events_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    export_data["events"].append(json.loads(line))
+    
+    # Create JSON response
+    json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+    
+    return StreamingResponse(
+        io.StringIO(json_str),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={experiment_id}_export.json"}
+    )
+
+
+async def _export_as_csv(experiment_id: str, decisions_file: Path, world_state_file: Path, events_file: Path):
+    """Export experiment data as CSV (multiple files in a zip would be ideal, but for now we'll create a comprehensive CSV)."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        "timestamp", "session_id", "type", "tick", "agent_id", 
+        "action_type", "thought", "perception", "mood_type", 
+        "mood_intensity", "energy", "position_x", "position_y"
+    ])
+    
+    # Process decisions
+    if decisions_file.exists():
+        with open(decisions_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    data = json.loads(line)
+                    action = data.get("parsed_action", {})
+                    mood = data.get("mood_state", {})
+                    
+                    writer.writerow([
+                        data.get("timestamp", ""),
+                        data.get("session_id", ""),
+                        "decision",
+                        data.get("tick", ""),
+                        data.get("agent_id", ""),
+                        action.get("type", ""),
+                        action.get("_thought", ""),
+                        data.get("perception", ""),
+                        mood.get("type", ""),
+                        mood.get("intensity", ""),
+                        "", "", ""  # Energy and position will be filled from world states
+                    ])
+    
+    # Process world states for agent positions and status
+    if world_state_file.exists():
+        with open(world_state_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    data = json.loads(line)
+                    state = data.get("state", {})
+                    agents = state.get("agents", [])
+                    
+                    for agent in agents:
+                        position = agent.get("position", {})
+                        status = agent.get("status", {})
+                        
+                        writer.writerow([
+                            data.get("timestamp", ""),
+                            data.get("session_id", ""),
+                            "world_state",
+                            data.get("tick", ""),
+                            agent.get("id", ""),
+                            "", "", "",  # No action/thought for world state
+                            status.get("mood", ""),
+                            "",  # No mood intensity in world state
+                            status.get("energy", ""),
+                            position.get("x", ""),
+                            position.get("y", "")
+                        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        io.StringIO(output.getvalue()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={experiment_id}_export.csv"}
+    )
+
+
+@app.get("/api/replay/{experiment_id}")
+async def get_replay_data(experiment_id: str):
+    """
+    Get replay data for a specific experiment.
+    Returns structured data for frontend replay functionality.
+    """
+    log_dir = Path(Config.LOG_DIR)
+    
+    # Check if experiment exists
+    world_state_file = log_dir / f"{experiment_id}_world_state.jsonl"
+    decisions_file = log_dir / f"{experiment_id}_decisions.jsonl"
+    
+    if not world_state_file.exists():
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    try:
+        replay_data = {
+            "experiment_id": experiment_id,
+            "ticks": [],
+            "metadata": {
+                "total_ticks": 0,
+                "agents": [],
+                "map_size": [10, 10]
+            }
+        }
+        
+        # Read world states to build tick-by-tick data
+        with open(world_state_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    data = json.loads(line)
+                    state = data.get("state", {})
+                    
+                    tick_data = {
+                        "tick": data.get("tick", 0),
+                        "timestamp": data.get("timestamp", ""),
+                        "agents": state.get("agents", []),
+                        "map": state.get("map", {}),
+                        "objects": state.get("objects", [])
+                    }
+                    
+                    replay_data["ticks"].append(tick_data)
+        
+        # Read decisions to add agent thoughts/actions to corresponding ticks
+        decisions_by_tick = {}
+        if decisions_file.exists():
+            with open(decisions_file, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        tick = data.get("tick", 0)
+                        agent_id = data.get("agent_id", "")
+                        
+                        if tick not in decisions_by_tick:
+                            decisions_by_tick[tick] = {}
+                        
+                        decisions_by_tick[tick][agent_id] = {
+                            "thought": data.get("parsed_action", {}).get("_thought", ""),
+                            "action": data.get("parsed_action", {}),
+                            "perception": data.get("perception", "")
+                        }
+        
+        # Merge decisions into tick data
+        for tick_data in replay_data["ticks"]:
+            tick = tick_data["tick"]
+            if tick in decisions_by_tick:
+                for agent in tick_data["agents"]:
+                    agent_id = agent["id"]
+                    if agent_id in decisions_by_tick[tick]:
+                        agent["decision"] = decisions_by_tick[tick][agent_id]
+        
+        # Update metadata
+        if replay_data["ticks"]:
+            replay_data["metadata"]["total_ticks"] = len(replay_data["ticks"])
+            first_tick = replay_data["ticks"][0]
+            if first_tick["agents"]:
+                replay_data["metadata"]["agents"] = [
+                    {"id": agent["id"], "role": agent["role"]} 
+                    for agent in first_tick["agents"]
+                ]
+            if first_tick["map"]:
+                replay_data["metadata"]["map_size"] = first_tick["map"].get("size", [10, 10])
+        
+        return replay_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load replay data: {str(e)}")
 
 
 if __name__ == "__main__":

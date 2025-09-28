@@ -38,10 +38,14 @@ class SimulationEngine:
         # Step 1: Create a deep copy of the current state
         new_state = copy.deepcopy(current_state)
         
-        # Step 2: Conflict preprocessing - identify invalid moves
+        # Step 2: Build spatial index for efficient agent lookups
+        spatial_index = self._build_spatial_index(new_state)
+        new_state['spatial_index'] = spatial_index
+        
+        # Step 3: Conflict preprocessing - identify invalid moves
         valid_actions = self._preprocess_actions(new_state, actions)
         
-        # Step 3: Process all valid actions
+        # Step 4: Process all valid actions
         for action in valid_actions:
             action_type = action.get('type')
             
@@ -61,10 +65,41 @@ class SimulationEngine:
                 self._handle_give(new_state, action)
             # Future action types can be added here
         
-        # Step 4: Increment tick counter
+        # Step 5: Update spatial index after all moves are processed
+        new_state['spatial_index'] = self._build_spatial_index(new_state)
+        
+        # Step 6: Increment tick counter
         new_state['tick'] += 1
         
         return new_state
+    
+    def _build_spatial_index(self, state: Dict[str, Any]) -> Dict[Tuple[int, int], List[str]]:
+        """
+        Build a spatial index mapping coordinates to agent IDs for O(1) lookups.
+        
+        This dramatically improves performance for agent perception from O(N²) to O(1)
+        by allowing agents to directly query who is at specific coordinates.
+        
+        Args:
+            state: Current world state
+            
+        Returns:
+            Dictionary mapping (x, y) tuples to lists of agent IDs at those positions
+        """
+        spatial_index = {}
+        
+        agents = state.get('agents', [])
+        for agent in agents:
+            position = agent.get('position', {})
+            x, y = position.get('x'), position.get('y')
+            
+            if x is not None and y is not None:
+                coord_key = (x, y)
+                if coord_key not in spatial_index:
+                    spatial_index[coord_key] = []
+                spatial_index[coord_key].append(agent.get('id'))
+        
+        return spatial_index
     
     def _preprocess_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

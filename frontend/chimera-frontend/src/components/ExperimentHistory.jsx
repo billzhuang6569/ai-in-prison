@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const ExperimentHistory = ({ isVisible, onClose, onLoadExperiment }) => {
+const ExperimentHistory = ({ isVisible, onClose, onLoadExperiment, onReplayExperiment }) => {
   const [experiments, setExperiments] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +22,30 @@ const ExperimentHistory = ({ isVisible, onClose, onLoadExperiment }) => {
       console.error('Failed to fetch experiments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportExperiment = async (experimentId, format) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/export/${experimentId}?format=${format}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${experimentId}_export.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.error('Export failed:', response.statusText);
+        alert('Export failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Export failed. Please check your connection.');
     }
   };
 
@@ -102,10 +126,31 @@ const ExperimentHistory = ({ isVisible, onClose, onLoadExperiment }) => {
                     
                     <button
                       className="config-button"
-                      onClick={() => window.open(`/api/experiments/${experiment.id}/download`, '_blank')}
+                      onClick={() => onReplayExperiment && onReplayExperiment(experiment.full_id || experiment.id)}
+                      disabled={experiment.status === 'running'}
                     >
-                      Download
+                      Replay
                     </button>
+                    
+                    <div className="export-dropdown">
+                      <button className="config-button export-btn">
+                        Export ▼
+                      </button>
+                      <div className="export-options">
+                        <button 
+                          onClick={() => handleExportExperiment(experiment.full_id || experiment.id, 'json')}
+                          className="export-option"
+                        >
+                          JSON
+                        </button>
+                        <button 
+                          onClick={() => handleExportExperiment(experiment.full_id || experiment.id, 'csv')}
+                          className="export-option"
+                        >
+                          CSV
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

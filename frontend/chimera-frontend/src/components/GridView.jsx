@@ -13,17 +13,19 @@ const GridView = ({ worldState, selectedAgent, onAgentSelect, agentTrajectories 
   };
 
   const getAgentColor = (agentId) => {
-    const colorMap = {
-      'guard_01': '#007acc',
-      'guard_02': '#0099ff',
-      'prisoner_01': '#d73a49',
-      'prisoner_02': '#ff4757'
-    };
-    return colorMap[agentId] || '#666';
+    // Use role-based colors that match the agent button colors
+    if (agentId.includes('guard')) {
+      return agentId === 'guard_01' ? '#007acc' : '#0099ff';
+    } else if (agentId.includes('prisoner')) {
+      return agentId === 'prisoner_01' ? '#d73a49' : '#ff4757';
+    }
+    return '#666';
   };
 
   const renderTrajectoryLines = (agentId, trajectory) => {
-    if (!trajectory || trajectory.length < 2) return null;
+    if (!trajectory || trajectory.length < 2) {
+      return null;
+    }
 
     const lines = [];
     const cellSize = 40;
@@ -38,14 +40,15 @@ const GridView = ({ worldState, selectedAgent, onAgentSelect, agentTrajectories 
       // Calculate opacity based on age (newer = more opaque)
       const age = trajectory.length - i - 1;
       let opacity;
-      if (age <= 3) opacity = 1.0;      // Last 3 steps: solid
-      else if (age <= 6) opacity = 0.5; // 4-6 steps: 50% transparent
-      else opacity = 0.3;               // 7+ steps: 70% transparent
+      if (age <= 2) opacity = 0.9;      // Last 2 steps: high opacity
+      else if (age <= 5) opacity = 0.6; // 3-5 steps: medium opacity
+      else opacity = 0.3;               // 6+ steps: low opacity
 
-      const x1 = from.x * totalCellSize + cellSize / 2;
-      const y1 = from.y * totalCellSize + cellSize / 2;
-      const x2 = to.x * totalCellSize + cellSize / 2;
-      const y2 = to.y * totalCellSize + cellSize / 2;
+      // Calculate coordinates to center of grid cells (account for grid padding and border)
+      const x1 = from.x * totalCellSize + cellSize / 2 + 13; // Fine-tune horizontal alignment
+      const y1 = from.y * totalCellSize + cellSize / 2 + 22; // Adjust vertical to center better
+      const x2 = to.x * totalCellSize + cellSize / 2 + 13;
+      const y2 = to.y * totalCellSize + cellSize / 2 + 22;
 
       lines.push(
         <line
@@ -55,7 +58,7 @@ const GridView = ({ worldState, selectedAgent, onAgentSelect, agentTrajectories 
           x2={x2}
           y2={y2}
           stroke={color}
-          strokeWidth="3"
+          strokeWidth="2"
           strokeOpacity={opacity}
           strokeLinecap="round"
         />
@@ -228,23 +231,11 @@ const GridView = ({ worldState, selectedAgent, onAgentSelect, agentTrajectories 
           width: width * 41,
           height: height * 41,
           pointerEvents: 'none',
-          zIndex: 1
+          zIndex: 5 // Behind agents but visible
         }}>
           {agentTrajectories && Object.entries(agentTrajectories).map(([agentId, trajectory]) => {
-            console.log(`Rendering trajectory for ${agentId}:`, trajectory);
             return renderTrajectoryLines(agentId, trajectory);
           })}
-          
-          {/* Debug: Add a test line to verify SVG is working */}
-          <line
-            x1="20"
-            y1="20"
-            x2="80"
-            y2="80"
-            stroke="yellow"
-            strokeWidth="2"
-            strokeOpacity="0.8"
-          />
         </svg>
         
         {/* Grid cells */}

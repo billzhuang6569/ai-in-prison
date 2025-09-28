@@ -7,6 +7,8 @@ simulation events, agent decisions, and world state changes.
 
 import json
 import os
+import queue
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -48,6 +50,11 @@ class SimulationLogger:
         # Initialize rich console for pretty output
         self.console = Console()
         
+        # Initialize queue and worker thread for non-blocking I/O
+        self.log_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self._write_loop, daemon=True)
+        self.worker_thread.start()
+        
         # Log session start
         self._log_event("session_start", {"session_id": self.session_id})
         self.console.print(f"[bold green]Simulation Logger initialized for session: {self.session_id}[/bold green]")
@@ -70,14 +77,66 @@ class SimulationLogger:
             "agent_id": agent_id,
             "tick": tick,
             "type": "decision",
+            "file_type": "decision",
             **decision_data
         }
         
-        # Write to decisions file
-        self._write_jsonl(self.decisions_file, log_entry)
-        
-        # Display on console
-        self._render_decision_console(agent_id, tick, decision_data)
+        # Put log entry into queue for non-blocking processing
+        self.log_queue.put(log_entry)
+    
+    def _write_loop(self) -> None:
+        """
+        Background thread loop for processing log entries from the queue.
+        This method runs continuously until a sentinel value (None) is received.
+        """
+        while True:
+            try:
+                # Block until a log entry is available
+                log_entry = self.log_queue.get()
+                
+                # Check for sentinel value to exit
+                if log_entry is None:
+                    break
+                
+                # Process the log entry based on its type
+                file_type = log_entry.get('file_type', 'event')
+                
+                if file_type == 'decision':
+                    # Write to decisions file
+                    self._write_jsonl(self.decisions_file, log_entry)
+                    # Display on console
+                    self._render_decision_console(
+                        log_entry.get('agent_id'),
+                        log_entry.get('tick'),
+                        {k: v for k, v in log_entry.items() if k not in ['timestamp', 'session_id', 'agent_id', 'tick', 'type', 'file_type']}
+                    )
+                elif file_type == 'world_state':
+                    # Write to world state file
+                    self._write_jsonl(self.world_state_file, log_entry)
+                    # Display summary on console
+                    self._render_world_state_console(log_entry.get('state', {}))
+                elif file_type == 'event':
+                    # Write to events file
+                    self._write_jsonl(self.events_file, log_entry)
+                    # Display on console based on event type
+                    event_type = log_entry.get('type', 'info')
+                    event_data = {k: v for k, v in log_entry.items() if k not in ['timestamp', 'session_id', 'type', 'file_type']}
+                    
+                    if event_type == "error":
+                        self.console.print(f"[bold red]ERROR:[/bold red] {event_data}")
+                    elif event_type == "warning":
+                        self.console.print(f"[bold yellow]WARNING:[/bold yellow] {event_data}")
+                    elif event_type in ["info", "session_start"]:
+                        self.console.print(f"[blue]INFO:[/blue] {event_data}")
+                
+                # Mark task as done
+                self.log_queue.task_done()
+                
+            except Exception as e:
+                # Handle any errors in the background thread
+                self.console.print(f"[bold red]Logger thread error: {e}[/bold red]")
+                # Continue processing other entries
+                continue
     
     def log_world_state(self, world_state: Dict[str, Any]) -> None:
         """
@@ -92,15 +151,13 @@ class SimulationLogger:
             "timestamp": timestamp,
             "session_id": self.session_id,
             "type": "world_state",
+            "file_type": "world_state",
             "tick": world_state.get('tick', 0),
             "state": world_state
         }
         
-        # Write to world state file
-        self._write_jsonl(self.world_state_file, log_entry)
-        
-        # Display summary on console
-        self._render_world_state_console(world_state)
+        # Put log entry into queue for non-blocking processing
+        self.log_queue.put(log_entry)
     
     def log_event(self, event_type: str, event_data: Dict[str, Any]) -> None:
         """
@@ -126,19 +183,12 @@ class SimulationLogger:
             "timestamp": timestamp,
             "session_id": self.session_id,
             "type": event_type,
+            "file_type": "event",
             **event_data
         }
         
-        # Write to events file
-        self._write_jsonl(self.events_file, log_entry)
-        
-        # Display on console based on event type
-        if event_type == "error":
-            self.console.print(f"[bold red]ERROR:[/bold red] {event_data}")
-        elif event_type == "warning":
-            self.console.print(f"[bold yellow]WARNING:[/bold yellow] {event_data}")
-        elif event_type in ["info", "session_start"]:
-            self.console.print(f"[blue]INFO:[/blue] {event_data}")
+        # Put log entry into queue for non-blocking processing
+        self.log_queue.put(log_entry)
     
     def _write_jsonl(self, file_path: Path, data: Dict[str, Any]) -> None:
         """
@@ -273,3 +323,18 @@ class SimulationLogger:
                 stats["files"][file_name] = {"size_bytes": 0, "line_count": 0}
         
         return stats
+    
+    def close(self) -> None:
+        """
+        Gracefully close the logger by stopping the background thread
+        and ensuring all queued log entries are processed.
+        """
+        # Send sentinel value to stop the worker thread
+        self.log_queue.put(None)
+        
+        # Wait for the worker thread to finish processing all entries
+        if self.worker_thread.is_alive():
+            self.worker_thread.join(timeout=5.0)  # Wait up to 5 seconds
+            
+        # Log session end
+        self.console.print(f"[bold green]Simulation Logger closed for session: {self.session_id}[/bold green]")

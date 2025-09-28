@@ -5,6 +5,7 @@ import GridView from './components/GridView';
 import InfoPanel from './components/InfoPanel';
 import ExperimentConfig from './components/ExperimentConfig';
 import ExperimentHistory from './components/ExperimentHistory';
+import ExperimentReplay from './components/ExperimentReplay';
 import useWebSocket from './hooks/useWebSocket';
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
   });
   const [showExperimentConfig, setShowExperimentConfig] = useState(false);
   const [showExperimentHistory, setShowExperimentHistory] = useState(false);
+  const [showExperimentReplay, setShowExperimentReplay] = useState(false);
+  const [replayExperimentId, setReplayExperimentId] = useState(null);
 
   // Use ref to prevent infinite reconnection loops
   const reconnectAttempts = useRef(0);
@@ -269,6 +272,13 @@ function App() {
     setShowExperimentHistory(false);
   };
 
+  const handleReplayExperiment = (experimentId) => {
+    // Open replay modal with experiment data
+    setReplayExperimentId(experimentId);
+    setShowExperimentReplay(true);
+    setShowExperimentHistory(false);
+  };
+
   const handleAgentSelect = (agentId) => {
     setSelectedAgent(agentId);
     
@@ -320,6 +330,17 @@ function App() {
         isVisible={showExperimentHistory}
         onClose={() => setShowExperimentHistory(false)}
         onLoadExperiment={handleLoadExperiment}
+        onReplayExperiment={handleReplayExperiment}
+      />
+
+      {/* Experiment Replay Modal */}
+      <ExperimentReplay
+        isVisible={showExperimentReplay}
+        onClose={() => {
+          setShowExperimentReplay(false);
+          setReplayExperimentId(null);
+        }}
+        experimentId={replayExperimentId}
       />
     </div>
   );

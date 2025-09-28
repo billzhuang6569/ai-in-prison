@@ -168,12 +168,17 @@
   display: inline-block;
 }
 
+/* Movement trails enhancement */
 .trajectory-overlay {
   position: absolute;
   top: 0;
   left: 0;
   pointer-events: none;
   z-index: 1;
+}
+
+.trajectory-overlay line {
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
 }
 
 .world-grid {
@@ -575,6 +580,484 @@
   max-height: 300px;
   overflow-y: auto;
   padding: 10px 0;
+}
+
+/* Speech bubble styles */
+.speech-bubble {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.speech-item {
+  margin-bottom: 8px;
+  padding: 6px;
+  background-color: #333;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.current-speech {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #404040;
+}
+
+.current-speech h4 {
+  color: #ffffff;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+/* Enhanced agent cards */
+.all-agents-status {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #404040;
+}
+
+.all-agents-status h3 {
+  color: #ffffff;
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  border-bottom: 1px solid #404040;
+  padding-bottom: 8px;
+}
+
+.agents-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-card {
+  background-color: #333333;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-card:hover {
+  background-color: #3a3a3a;
+  border-color: #505050;
+}
+
+.agent-card.selected {
+  border-color: #007acc;
+  background-color: rgba(0, 122, 204, 0.1);
+}
+
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.agent-role {
+  font-weight: bold;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.agent-role.guard {
+  background-color: #007acc;
+  color: white;
+}
+
+.agent-role.prisoner {
+  background-color: #d73a49;
+  color: white;
+}
+
+.agent-position {
+  font-size: 11px;
+  color: #888;
+}
+
+.agent-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #cccccc;
+}
+
+.status-row span:first-child {
+  color: #888888;
+}
+
+.action-type {
+  background-color: #404040;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+/* Enhanced selected agent info */
+.role-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.role-badge.guard {
+  background-color: #007acc;
+  color: white;
+}
+
+.role-badge.prisoner {
+  background-color: #d73a49;
+  color: white;
+}
+
+.energy-bar {
+  position: relative;
+  width: 100px;
+  height: 16px;
+  background-color: #404040;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.energy-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #28a745 0%, #ffc107 70%, #dc3545 100%);
+  transition: width 0.3s ease;
+}
+
+.energy-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+}
+
+.mood-indicator {
+  padding: 2px 6px;
+  background-color: #404040;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.action-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-content,
+.action-target {
+  font-size: 11px;
+  color: #cccccc;
+  background-color: #2a2a2a;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+
+/* Replay styles */
+.replay-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.replay-container {
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  width: 95vw;
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.replay-header {
+  background-color: #2d2d2d;
+  padding: 15px 20px;
+  border-bottom: 1px solid #404040;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.replay-header h2 {
+  color: #ffffff;
+  margin: 0;
+  font-size: 18px;
+}
+
+.replay-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.replay-main {
+  flex: 1;
+  padding: 20px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.replay-grid {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.replay-sidebar {
+  width: 300px;
+  background-color: #252525;
+  border-left: 1px solid #404040;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.replay-info h3,
+.agent-replay-info h3 {
+  color: #ffffff;
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  border-bottom: 1px solid #404040;
+  padding-bottom: 8px;
+}
+
+.info-item,
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.info-item span:first-child,
+.status-item span:first-child {
+  color: #888888;
+}
+
+.agent-replay-info {
+  margin-top: 20px;
+}
+
+.agent-decision {
+  margin-top: 15px;
+}
+
+.agent-decision h4 {
+  color: #ffffff;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.decision-thought,
+.decision-action {
+  margin-bottom: 10px;
+}
+
+.decision-thought strong,
+.decision-action strong {
+  color: #cccccc;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.decision-thought p,
+.decision-action p {
+  color: #ffffff;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  background-color: #333333;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.replay-controls {
+  background-color: #2d2d2d;
+  border-top: 1px solid #404040;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.control-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.control-btn {
+  background-color: #404040;
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s;
+}
+
+.control-btn:hover {
+  background-color: #505050;
+}
+
+.progress-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.progress-slider {
+  width: 100%;
+  height: 6px;
+  background: #404040;
+  outline: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.progress-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.progress-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.progress-info {
+  color: #cccccc;
+  font-size: 12px;
+  text-align: center;
+}
+
+.speed-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.speed-btn {
+  background-color: #404040;
+  border: none;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.speed-btn:hover {
+  background-color: #505050;
+}
+
+.speed-btn.active {
+  background-color: #007acc;
+}
+
+/* Export dropdown styles */
+.export-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.export-btn {
+  background-color: #28a745 !important;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.export-btn:hover {
+  background-color: #218838 !important;
+}
+
+.export-options {
+  display: none;
+  position: absolute;
+  background-color: #f9f9f9;
+  min-width: 80px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 1000;
+  right: 0;
+  top: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.export-dropdown:hover .export-options {
+  display: block;
+}
+
+.export-option {
+  color: black;
+  padding: 8px 12px;
+  text-decoration: none;
+  display: block;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.export-option:hover {
+  background-color: #f1f1f1;
+}
+
+/* Experiment actions layout */
+.experiment-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.experiment-actions .config-button {
+  font-size: 12px;
+  padding: 6px 12px;
 }
 
 /* Experiment Configuration Styles */
